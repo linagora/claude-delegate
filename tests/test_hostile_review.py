@@ -221,6 +221,25 @@ class HostileReviewTest(FeatureBranchTestCase):
         self.assertEqual(companion["claude_code_version"], "9.9.9")
         self.assertEqual(companion["permission_denials"], ["Read /repo/.env"])
 
+    def test_run_details_nobody_reported_are_shown_as_unknown(self) -> None:
+        unreported = ("num_turns", "total_cost_usd", "duration_ms", "permission_denials")
+        self.sb.fake.reply({k: v for k, v in success().items() if k not in unreported})
+        self.sb.fake.version(None)
+
+        result = self.sb.run("hostile-review", "main")
+
+        for row in [
+            "| Tours | inconnu |",
+            "| Coût estimé | inconnu |",
+            "| Durée | inconnue |",
+            "| Permissions refusées | inconnues |",
+            "Claude Code inconnue |",
+        ]:
+            self.assertIn(row, result.stdout)
+        companion = json.loads(report_path(result.stdout).with_suffix(".json").read_text(encoding="utf-8"))
+        for field in ("num_turns", "cost_usd", "duration_s", "permission_denials", "claude_code_version"):
+            self.assertIsNone(companion[field], field)
+
     def test_sonnet_can_be_requested_and_other_models_are_refused(self) -> None:
         self.sb.run("hostile-review", "main", "--model", "sonnet")
 

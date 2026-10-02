@@ -58,18 +58,28 @@ class HostileReport:
             ("Révision relue", _short(self.context.reviewed_revision)),
             ("Modèle", self.review.model),
             ("Effort", self.execution.effort),
-            ("Tours", str(self.review.num_turns)),
+            ("Tours", _unknown_if_none(self.review.num_turns, "inconnu")),
             ("Coût estimé", _money(self.review.cost_usd)),
             ("Durée", _duration(self.review.duration_s)),
             ("Prompt", _short(self.execution.prompt_sha256)),
-            ("Versions", f"claude-delegate {__version__}, Claude Code {self.execution.claude_code_version}"),
-            ("Permissions refusées", "; ".join(self.review.permission_denials) or "aucune"),
+            ("Versions", f"claude-delegate {__version__}, Claude Code {self.execution.claude_code_version or 'inconnue'}"),
+            ("Permissions refusées", _denials(self.review.permission_denials)),
         ]
 
 
 def _short(digest: str) -> str:
     """Abbreviated commit id or hash, as shown in report headers."""
     return digest[:12]
+
+
+def _unknown_if_none(value: Optional[int], unknown: str) -> str:
+    return unknown if value is None else str(value)
+
+
+def _denials(denials: Optional[List[str]]) -> str:
+    if denials is None:
+        return "inconnues"
+    return "; ".join(denials) or "aucune"
 
 
 def _money(usd: Optional[float]) -> str:

@@ -36,7 +36,10 @@ from pathlib import Path
 here = Path({directory!r})
 argv = sys.argv[1:]
 if argv == ["--version"]:
-    print("9.9.9 (Claude Code)")
+    version = here / "version.txt"
+    if not version.exists():
+        sys.exit(1)
+    print(version.read_text(encoding="utf-8"))
     sys.exit(0)
 prompt_file = None
 if "--append-system-prompt-file" in argv:
@@ -98,6 +101,15 @@ class FakeClaude:
         )
         self.path.chmod(0o755)
         self.reply(success())
+        self.version("9.9.9 (Claude Code)")
+
+    def version(self, text: Optional[str]) -> None:
+        """What `claude --version` prints; None makes it fail."""
+        version = self.directory / "version.txt"
+        if text is None:
+            version.unlink(missing_ok=True)
+        else:
+            version.write_text(text, encoding="utf-8")
 
     def reply(self, payload: Dict[str, Any], exit_code: int = 0) -> None:
         self.reply_raw(json.dumps(payload), exit_code)

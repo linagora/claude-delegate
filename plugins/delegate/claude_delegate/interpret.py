@@ -49,10 +49,11 @@ class Review:
     summary: str
     findings: List[Finding]
     model: str
-    num_turns: int
+    num_turns: Optional[int]
     cost_usd: Optional[float]
     duration_s: Optional[float]
-    permission_denials: List[str]
+    #: None when the result does not say (unlike an empty list: none refused).
+    permission_denials: Optional[List[str]]
 
 
 def read_review(done: "subprocess.CompletedProcess[str]") -> Review:
@@ -70,17 +71,22 @@ def read_review(done: "subprocess.CompletedProcess[str]") -> Review:
         raise DelegateError(_INVALID_OUTPUT, EXIT_INVALID_OUTPUT)
     cost = payload.get("total_cost_usd")
     duration = payload.get("duration_ms")
+    denials = payload.get("permission_denials")
     return Review(
         summary=structured["summary"],
         findings=_numbered(structured["findings"]),
         model=_model(payload),
-        num_turns=int(payload.get("num_turns") or 0),
+        num_turns=_int_or_none(payload.get("num_turns")),
         cost_usd=float(cost) if isinstance(cost, (int, float)) else None,
         duration_s=duration / 1000 if isinstance(duration, (int, float)) else None,
-        permission_denials=[
-            _denial(d) for d in payload.get("permission_denials") or [] if isinstance(d, dict)
-        ],
+        permission_denials=(
+            [_denial(d) for d in denials if isinstance(d, dict)] if isinstance(denials, list) else None
+        ),
     )
+
+
+def _int_or_none(value: Any) -> Optional[int]:
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
 def _denial(denial: Dict[str, Any]) -> str:

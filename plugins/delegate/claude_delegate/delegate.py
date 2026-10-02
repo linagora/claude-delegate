@@ -8,7 +8,7 @@ import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from . import policy
 from .errors import EXIT_PREPARATION, DelegateError
@@ -40,7 +40,7 @@ class Execution:
     model: str
     effort: str
     prompt_sha256: str
-    claude_code_version: str
+    claude_code_version: Optional[str]
 
 
 def launch(
@@ -76,8 +76,8 @@ def launch(
     return done, execution
 
 
-def claude_code_version(binary: str) -> str:
-    """`2.1.287` from `claude --version`, or "inconnue"."""
+def claude_code_version(binary: str) -> Optional[str]:
+    """`2.1.287` from `claude --version`, or None when it cannot be told."""
     try:
         done = subprocess.run(
             [binary, "--version"],
@@ -88,9 +88,9 @@ def claude_code_version(binary: str) -> str:
             timeout=30,
         )
     except (OSError, subprocess.TimeoutExpired):
-        return "inconnue"
+        return None
     words = done.stdout.split()
-    return words[0] if done.returncode == 0 and words else "inconnue"
+    return words[0] if done.returncode == 0 and words else None
 
 
 def resolve_binary() -> str:
