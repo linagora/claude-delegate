@@ -24,6 +24,10 @@ _INCOMPLETE = {
     "error_max_turns": "revue incomplète : nombre maximal de tours atteint",
 }
 
+_INVALID_OUTPUT = "la sortie structurée du délégué est absente ou non conforme au schéma"
+#: Claude Code gave up producing output that matches the schema.
+_OUTPUT_RETRIES_EXHAUSTED = "error_max_structured_output_retries"
+
 
 @dataclass(frozen=True)
 class Finding:
@@ -63,9 +67,7 @@ def read_review(done: "subprocess.CompletedProcess[str]") -> Review:
     _raise_on_failure(payload, done.returncode)
     structured = payload.get("structured_output")
     if not isinstance(structured, dict) or not schemas.is_review(structured):
-        raise DelegateError(
-            "la sortie structurée du délégué est absente ou non conforme au schéma", EXIT_INVALID_OUTPUT
-        )
+        raise DelegateError(_INVALID_OUTPUT, EXIT_INVALID_OUTPUT)
     cost = payload.get("total_cost_usd")
     duration = payload.get("duration_ms")
     return Review(
@@ -92,6 +94,8 @@ def _raise_on_failure(payload: Dict[str, Any], returncode: int) -> None:
     subtype = payload.get("subtype")
     if subtype in _INCOMPLETE:
         raise DelegateError(_INCOMPLETE[subtype], EXIT_INCOMPLETE)
+    if subtype == _OUTPUT_RETRIES_EXHAUSTED:
+        raise DelegateError(f"{_INVALID_OUTPUT} (tentatives épuisées)", EXIT_INVALID_OUTPUT)
     if not payload.get("is_error") and subtype == "success" and returncode == 0:
         return
     reason = str(payload.get("result") or subtype or f"code {returncode}")

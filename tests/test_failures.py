@@ -25,7 +25,7 @@ class FailureTest(FeatureBranchTestCase):
         self.assertIn(message, result.stderr)
         self.assertNotIn("Traceback", result.stderr)
         self.assertEqual(result.stdout, "")
-        self.assertEqual(list(self.sb.state.rglob("*.md")), [])
+        self.assertEqual([p for p in self.sb.state.rglob("*") if p.is_file()], [])
 
     def test_every_usage_limit_wording_is_an_exhausted_quota_with_its_reset_time(self) -> None:
         for wording, expected in [
@@ -61,10 +61,17 @@ class FailureTest(FeatureBranchTestCase):
 
         self.assert_failure(REVIEW_INCOMPLETE, "revue incomplète : nombre maximal de tours atteint")
 
-    def test_a_structured_output_off_schema_is_an_invalid_output(self) -> None:
-        self.sb.fake.reply(success(findings=[{"severity": "critique"}]))
+    def test_a_missing_or_off_schema_structured_output_is_an_invalid_output(self) -> None:
+        missing = {k: v for k, v in success().items() if k != "structured_output"}
+        for name, payload, exit_code in [
+            ("absente", missing, 0),
+            ("non conforme", success(findings=[{"severity": "critique"}]), 0),
+            ("tentatives épuisées", failed(subtype="error_max_structured_output_retries"), 1),
+        ]:
+            with self.subTest(name):
+                self.sb.fake.reply(payload, exit_code)
 
-        self.assert_failure(INVALID_OUTPUT, "sortie structurée")
+                self.assert_failure(INVALID_OUTPUT, "sortie structurée")
 
     def test_any_other_error_is_a_delegate_failure(self) -> None:
         for name, stdout, code in [
