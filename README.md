@@ -120,7 +120,8 @@ La re-revue ne démarre pas, avec le code de sortie 3, dans ces cas :
 
 - le rapport est introuvable, illisible, ou concerne un autre dépôt ;
 - rien n'a changé depuis le rapport d'origine ;
-- git a purgé la révision relue par le rapport d'origine : lance alors une revue complète.
+- git a purgé la révision relue par le rapport d'origine : lance alors une revue complète ;
+- l'écart et le diff complet dépassent ensemble 1 000 000 caractères.
 
 La re-revue d'une pull request n'est pas encore prise en charge.
 
