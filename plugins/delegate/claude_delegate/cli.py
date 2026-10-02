@@ -48,7 +48,7 @@ def _hostile_review(base: Optional[str], model: str) -> int:
     )
     created_at = datetime.now(timezone.utc)
     hostile = report.HostileReport(
-        id=archive.new_id("hostile", created_at),
+        id=archive.new_id(report.HostileReport.KIND, created_at),
         created_at=created_at,
         repo=archive.repo_key(ctx.root, ctx.origin_url),
         context=ctx,

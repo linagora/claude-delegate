@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, ClassVar, Dict, List, Optional, Tuple
 
 from . import __version__
 from .delegate import Execution
@@ -15,6 +15,9 @@ from .schemas import SEVERITIES
 
 @dataclass(frozen=True)
 class HostileReport:
+    KIND: ClassVar[str] = "hostile"
+    TITLE: ClassVar[str] = "Revue hostile"
+
     id: str
     created_at: datetime
     repo: str
@@ -23,18 +26,18 @@ class HostileReport:
     review: Review
 
     def markdown(self) -> str:
-        return _render("Revue hostile", self._header(), self.review)
+        return _render(self.TITLE, self._header(), self.review)
 
     def companion(self) -> Dict[str, Any]:
         return {
             "id": self.id,
-            "type": "hostile",
+            "type": self.KIND,
             "created_at": self.created_at.isoformat(),
             "repo": self.repo,
             "base": self.context.base,
             "merge_base": self.context.merge_base,
             "reviewed_revision": self.context.reviewed_revision,
-            "requested_model": self.execution.model,
+            "requested_model": self.execution.requested_model,
             "model": self.review.model,
             "effort": self.execution.effort,
             "num_turns": self.review.num_turns,
@@ -51,7 +54,7 @@ class HostileReport:
     def _header(self) -> List[Tuple[str, str]]:
         return [
             ("Identifiant", self.id),
-            ("Type", "revue hostile"),
+            ("Type", self.TITLE.lower()),
             ("Date (UTC)", f"{self.created_at:%Y-%m-%d %H:%M:%S}"),
             ("Dépôt", self.repo),
             ("Base", f"{self.context.base} (merge-base {_short(self.context.merge_base)})"),
@@ -62,7 +65,7 @@ class HostileReport:
             ("Coût estimé", _money(self.review.cost_usd)),
             ("Durée", _duration(self.review.duration_s)),
             ("Prompt", _short(self.execution.prompt_sha256)),
-            ("Versions", f"claude-delegate {__version__}, Claude Code {self.execution.claude_code_version or 'inconnue'}"),
+            ("Versions", _versions(self.execution.claude_code_version)),
             ("Permissions refusées", _denials(self.review.permission_denials)),
         ]
 
@@ -75,6 +78,10 @@ def _cell(text: str) -> str:
 def _short(digest: str) -> str:
     """Abbreviated commit id or hash, as shown in report headers."""
     return digest[:12]
+
+
+def _versions(claude_code: Optional[str]) -> str:
+    return f"claude-delegate {__version__}, Claude Code {claude_code or 'inconnue'}"
 
 
 def _unknown_if_none(value: Optional[int], unknown: str) -> str:

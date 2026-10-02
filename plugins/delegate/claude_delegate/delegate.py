@@ -37,7 +37,7 @@ MAX_BUDGET_USD = 5
 class Execution:
     """How the reviewer was run, as recorded in the report."""
 
-    model: str
+    requested_model: str
     effort: str
     prompt_sha256: str
     claude_code_version: Optional[str]
@@ -49,12 +49,13 @@ def launch(
     schema: Dict[str, Any],
     prompt_file: Path,
     instruction: str,
-    model: str = DEFAULT_MODEL,
+    *,
+    model: str,
 ) -> Tuple["subprocess.CompletedProcess[str]", Execution]:
     """Run the reviewer in `root` on `task_input`; return its raw result and how it ran."""
     binary = resolve_binary()
     execution = Execution(
-        model=model,
+        requested_model=model,
         effort=EFFORT,
         prompt_sha256=hashlib.sha256(prompt_file.read_bytes()).hexdigest(),
         claude_code_version=claude_code_version(binary),
