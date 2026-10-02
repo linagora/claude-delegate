@@ -49,6 +49,15 @@ class ConventionsTest(FeatureBranchTestCase):
         self.assertNotIn(SECTION, prompt)
         self.assertNotIn("CONVENTION_DE_LA_BRANCHE", prompt)
 
+    def test_imports_are_resolved_from_the_merge_base_too(self) -> None:
+        self.on_main({"CLAUDE.md": "@AGENTS.md\n", "AGENTS.md": "REGLE_DES_AGENTS\n"})
+        self.sb.write("AGENTS.md", "REGLE_MODIFIEE\n")
+
+        prompt = self.system_prompt()
+
+        self.assertIn("REGLE_DES_AGENTS", prompt)
+        self.assertNotIn("REGLE_MODIFIEE", prompt)
+
     def test_the_task_and_its_conventions_travel_in_one_prompt_file(self) -> None:
         self.on_main({"CLAUDE.md": "CONVENTION_DE_BASE\n"})
 
