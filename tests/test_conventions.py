@@ -156,6 +156,14 @@ class ConventionsTest(FeatureBranchTestCase):
         self.assertIn("(import ignoré : image.bin)", prompt)
         self.assertNotIn("\x00", prompt)
 
+    def test_the_conventions_are_framed_as_the_only_repository_text_to_follow(self) -> None:
+        self.on_main({"CLAUDE.md": "CONVENTION_DE_BASE\n"})
+
+        task, section = self.system_prompt().split(SECTION, 1)
+
+        self.assertIn("« Conventions du projet »", task)
+        self.assertLess(section.index("CONVENTION_DE_BASE"), section.index("Fin des conventions du projet"))
+
     def test_the_task_and_its_conventions_travel_in_one_prompt_file(self) -> None:
         self.on_main({"CLAUDE.md": "CONVENTION_DE_BASE\n"})
 

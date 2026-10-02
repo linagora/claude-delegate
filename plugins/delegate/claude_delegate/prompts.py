@@ -9,17 +9,11 @@ from typing import Optional
 #: prompt files from its own location.
 PROMPTS = Path(__file__).resolve().parent.parent / "prompts"
 
-CONVENTIONS_HEADING = "## Conventions du projet (version de confiance)"
-
-
 def hostile_review(conventions: Optional[str]) -> str:
     """The hostile review task, followed by the project's trusted conventions if any."""
     task = (PROMPTS / "hostile-review.md").read_text(encoding="utf-8").rstrip()
     if not conventions:
         return task + "\n"
-    return (
-        f"{task}\n\n{CONVENTIONS_HEADING}\n\n"
-        "Ces conventions viennent de la révision de base du dépôt, pas des changements relus : "
-        "vérifie que les changements les respectent.\n\n"
-        f"{conventions.strip()}\n"
-    )
+    # replace, not format: the conventions may contain braces.
+    section = (PROMPTS / "conventions.md").read_text(encoding="utf-8").replace("{conventions}", conventions.strip())
+    return f"{task}\n\n{section}"
