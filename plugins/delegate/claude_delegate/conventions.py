@@ -9,8 +9,9 @@ from typing import Callable, Optional, Tuple
 
 from . import policy
 
-#: Reads a file of the trusted revision: its text, or None when it is absent.
-Reader = Callable[[str], Optional[str]]
+#: Reads an entry of the trusted revision: ("file", text), ("link", target),
+#: or None when it is absent or is not a file.
+Reader = Callable[[str], Optional[Tuple[str, str]]]
 
 #: A CLAUDE.md line made only of `@path` imports that file, as in Claude Code.
 _IMPORT = re.compile(r"^@(\S+)\s*$")
@@ -27,9 +28,14 @@ def _with_imports(read: Reader, path: str, chain: Tuple[str, ...]) -> Optional[s
     """`chain` lists the files that led to this one, outermost first."""
     if path in chain or len(chain) > _MAX_IMPORT_DEPTH:
         return None
-    content = read(path)
-    if content is None:
+    entry = read(path)
+    if entry is None:
         return None
+    kind, content = entry
+    if kind == "link":
+        # A symlink, such as CLAUDE.md -> AGENTS.md, follows the import rules.
+        target = _imported_path(path, content.strip())
+        return _with_imports(read, target, chain + (path,)) if target else None
     lines = []
     for line in content.splitlines():
         match = _IMPORT.match(line)

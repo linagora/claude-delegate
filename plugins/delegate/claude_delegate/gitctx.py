@@ -78,7 +78,7 @@ def hostile_context(cwd: Path, base: Optional[str]) -> HostileContext:
 
 def trusted_conventions(root: Path, revision: str) -> Optional[str]:
     """The conventions as they are at `revision`, so the reviewed work cannot change them."""
-    return conventions.trusted(lambda path: _show(root, revision, path))
+    return conventions.trusted(lambda path: _entry(root, revision, path))
 
 
 def default_base(root: Path) -> str:
@@ -120,9 +120,19 @@ def _freeze_working_tree(root: Path) -> str:
         return git(root, "commit-tree", tree, "-p", "HEAD", "-m", "claude-delegate : révision relue", env=env)
 
 
-def _show(root: Path, revision: str, path: str) -> Optional[str]:
-    done = _run(root, ("show", f"{revision}:{path}"))
-    return done.stdout if done.returncode == 0 else None
+def _entry(root: Path, revision: str, path: str) -> Optional[Tuple[str, str]]:
+    """("file", text) or ("link", target) for a path of `revision`; None when it
+    is absent or is not a file, such as a directory."""
+    listed = _run(root, ("ls-tree", "-z", revision, "--", path))
+    if listed.returncode != 0 or not listed.stdout:
+        return None
+    mode, kind, sha = listed.stdout.split("\0", 1)[0].partition("\t")[0].split()
+    if kind != "blob":
+        return None
+    blob = _run(root, ("cat-file", "blob", sha))
+    if blob.returncode != 0:
+        return None
+    return ("link" if mode == "120000" else "file", blob.stdout)
 
 
 def _git_or_none(cwd: Path, *args: str) -> Optional[str]:

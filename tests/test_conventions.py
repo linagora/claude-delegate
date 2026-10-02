@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import unittest
 
 from tests.support import FeatureBranchTestCase
@@ -8,11 +9,13 @@ SECTION = "## Conventions du projet (version de confiance)"
 
 
 class ConventionsTest(FeatureBranchTestCase):
-    def on_main(self, files: dict) -> None:
-        """Commit files on main, then put the feature branch back on top of it."""
+    def on_main(self, files: dict, links: dict = {}) -> None:
+        """Commit files (and symlinks) on main, then put the feature branch back on top of it."""
         self.sb.git("switch", "-q", "main")
         for name, content in files.items():
             self.sb.write(name, content)
+        for name, target in links.items():
+            os.symlink(target, self.sb.repo / name)
         self.sb.commit_all("conventions")
         self.sb.git("switch", "-q", "feature")
         self.sb.git("rebase", "-q", "main")
@@ -71,6 +74,21 @@ class ConventionsTest(FeatureBranchTestCase):
         prompt = self.system_prompt()
 
         self.assertNotIn("SECRET_VALUE", prompt)
+
+    def test_a_symlinked_claude_md_brings_in_its_target(self) -> None:
+        self.on_main({"AGENTS.md": "REGLE_DES_AGENTS\n"}, links={"CLAUDE.md": "AGENTS.md"})
+
+        prompt = self.system_prompt()
+
+        self.assertIn("REGLE_DES_AGENTS", prompt)
+
+    def test_an_import_of_a_directory_is_not_expanded(self) -> None:
+        self.on_main({"CLAUDE.md": "@docs\n", "docs/guide.md": "CONTENU_DU_DOSSIER\n"})
+
+        prompt = self.system_prompt()
+
+        self.assertNotIn("CONTENU_DU_DOSSIER", prompt)
+        self.assertNotIn("guide.md", prompt)
 
     def test_the_task_and_its_conventions_travel_in_one_prompt_file(self) -> None:
         self.on_main({"CLAUDE.md": "CONVENTION_DE_BASE\n"})
