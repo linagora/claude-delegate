@@ -82,6 +82,24 @@ class PluginCommandsTest(unittest.TestCase):
             [f"{PLUGIN_ROOT_VAR}/bin/claude-delegate hostile-review $ARGUMENTS"],
         )
 
+    def test_handoff_writes_a_dated_brief_without_shell_and_points_to_a_spec_session(self) -> None:
+        _, body = parse_command(PLUGIN / "commands" / "handoff.md")
+
+        self.assertEqual(shell_invocations(body), [])
+        self.assertIn("docs/specs/brief-AAAAMMJJ-", body)
+        self.assertIn("[a-z0-9-]", body)
+        for section in [
+            "## Contexte",
+            "## Objectif",
+            "## Décisions déjà prises",
+            "## Contraintes",
+            "## Questions ouvertes",
+            "## Fichiers et références",
+        ]:
+            self.assertIn(section, body)
+        self.assertIn("session Claude Code sur Anthropic", body)
+        self.assertLess(body.index("grill-me"), body.index("to-spec"))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,6 +1,6 @@
 # claude-delegate
 
-Plugin Claude Code qui délègue les revues de code d'une session branchée sur DeepSeek à Claude : Opus par défaut, Sonnet à la demande. La revue tourne dans une session Claude Code isolée et en lecture seule, déclenchée de façon déterministe par une slash command. La spécification est dans l'issue #1.
+Plugin Claude Code qui délègue les revues de code d'une session branchée sur DeepSeek à Claude : Opus par défaut, Sonnet à la demande. La revue tourne dans une session Claude Code isolée et en lecture seule, déclenchée de façon déterministe par une slash command. Le plugin prépare aussi le passage de relais vers une session de spec sur Anthropic. La spécification est dans l'issue #1.
 
 ## Installation
 
@@ -94,6 +94,14 @@ En cas d'échec, rien n'est archivé et le message part sur la sortie d'erreur. 
 Le rapport (constats Bloquant, Important et Mineur) est archivé dans `${XDG_STATE_HOME:-~/.local/state}/claude-delegate/<dépôt>/`, accompagné d'un JSON. Il est ensuite injecté dans la session. DeepSeek vérifie et classe chaque point sans rien modifier avant ta validation.
 
 Depuis un terminal : `<dossier du plugin>/bin/claude-delegate hostile-review [base]`.
+
+### Préparer une spec
+
+```
+/delegate:handoff <sujet>
+```
+
+Les specs ne sont pas déléguées : elles s'écrivent dans une session Claude Code sur Anthropic, avec `grill-me` puis `to-spec`. Cette commande fait écrire par DeepSeek un brief daté dans `docs/specs/brief-AAAAMMJJ-<sujet>.md`. Il contient le contexte, l'objectif, les décisions déjà prises, les contraintes, les questions ouvertes, ainsi que les fichiers et références utiles. La session Anthropic n'a ensuite qu'à partir de ce brief.
 
 ## Isolation de la session déléguée
 
