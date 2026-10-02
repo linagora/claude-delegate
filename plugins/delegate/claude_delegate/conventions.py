@@ -15,6 +15,8 @@ Reader = Callable[[str], Optional[Tuple[str, str]]]
 
 #: A CLAUDE.md line made only of `@path` imports that file, as in Claude Code.
 _IMPORT = re.compile(r"^@(\S+)\s*$")
+#: Imports are not evaluated inside fenced code blocks.
+_FENCE = re.compile(r"^\s*(```|~~~)")
 _MAX_IMPORT_DEPTH = 5
 
 
@@ -37,8 +39,11 @@ def _with_imports(read: Reader, path: str, chain: Tuple[str, ...]) -> Optional[s
         target = _imported_path(path, content.strip())
         return _with_imports(read, target, chain + (path,)) if target else None
     lines = []
+    in_code_block = False
     for line in content.splitlines():
-        match = _IMPORT.match(line)
+        if _FENCE.match(line):
+            in_code_block = not in_code_block
+        match = None if in_code_block else _IMPORT.match(line)
         if not match:
             lines.append(line)
             continue

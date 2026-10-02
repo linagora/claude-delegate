@@ -116,6 +116,14 @@ class ConventionsTest(FeatureBranchTestCase):
         self.assertEqual(section.count("(import ignoré : "), 6)
         self.assertEqual(section.count("CONTENU_EN_BOUCLE"), 1)
 
+    def test_imports_inside_code_blocks_are_left_alone(self) -> None:
+        self.on_main({"CLAUDE.md": "Exemple :\n```\n@AGENTS.md\n```\n", "AGENTS.md": "REGLE_DES_AGENTS\n"})
+
+        section = self.system_prompt().split(SECTION, 1)[1]
+
+        self.assertIn("```\n@AGENTS.md\n```", section)
+        self.assertNotIn("REGLE_DES_AGENTS", section)
+
     def test_the_task_and_its_conventions_travel_in_one_prompt_file(self) -> None:
         self.on_main({"CLAUDE.md": "CONVENTION_DE_BASE\n"})
 
