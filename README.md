@@ -48,7 +48,7 @@ Depuis un terminal : `<dossier du plugin>/bin/claude-delegate hostile-review [ba
 - **Configuration ignorée** : les settings, hooks, règles d'autorisation et `CLAUDE.md` du projet ne sont pas chargés, ni les serveurs MCP (`--strict-mcp-config`). En cas de demande non autorisée, le refus est automatique (`--permission-mode dontAsk`).
 - **Lectures interdites** : `**/.env`, `**/.env.*` et `**/.claude/settings*.json`.
 - **Environnement reconstruit à partir de rien** : seules `HOME`, `USER`, `LOGNAME`, `PATH`, `LANG`, `LC_*`, `TERM` et `TMPDIR` passent, plus `CLAUDE_CONFIG_DIR=~/.claude-anthropic`. Aucune variable `ANTHROPIC_*` ou `CLAUDE_CODE_*` ni aucun jeton.
-- **Coût borné** : Opus en effort `high`, 30 tours au plus, 5 $ estimés au plus.
+- **Coût borné** : Opus en effort `high`, 30 tours au plus, et un plafond de 5 $ estimés. Ce plafond est souple : Claude Code le vérifie après chaque appel, il peut donc être dépassé d'un appel.
 
 Variables utiles :
 
