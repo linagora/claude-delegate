@@ -1,6 +1,6 @@
 # claude-delegate
 
-Plugin Claude Code qui délègue les revues de code d'une session branchée sur DeepSeek à Claude : Opus par défaut, Sonnet à la demande. La revue tourne dans une session Claude Code isolée et en lecture seule, déclenchée de façon déterministe par une slash command. La spécification est dans l'issue #1.
+Plugin Claude Code qui délègue les revues de code d'une session branchée sur DeepSeek à Claude : Opus par défaut, Sonnet à la demande. La revue tourne dans une session Claude Code isolée et en lecture seule, déclenchée de façon déterministe par une slash command. Le plugin prépare aussi le passage de relais vers une session de spec sur Anthropic. La spécification est dans l'issue #1.
 
 ## Installation
 
