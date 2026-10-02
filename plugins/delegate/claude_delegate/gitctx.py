@@ -196,11 +196,15 @@ def _reviewable_diff(root: Path, start: str, end: str, empty_reason: str) -> str
             )
         raise DelegateError(f"rien à relire : {empty_reason}", EXIT_PREPARATION)
     if len(diff) > MAX_DIFF_CHARS:
-        size, limit = (f"{n:,}".replace(",", " ") for n in (len(diff), MAX_DIFF_CHARS))
-        raise DelegateError(
-            f"diff trop volumineux pour une revue : {size} caractères (maximum {limit})", EXIT_PREPARATION
-        )
+        raise _too_large(len(diff))
     return diff
+
+
+def _too_large(chars: int) -> DelegateError:
+    size, limit = (f"{n:,}".replace(",", " ") for n in (chars, MAX_DIFF_CHARS))
+    return DelegateError(
+        f"diff trop volumineux pour une revue : {size} caractères (maximum {limit})", EXIT_PREPARATION
+    )
 
 
 def _unreviewed_changes(root: Path, start: str, end: str) -> List[str]:
