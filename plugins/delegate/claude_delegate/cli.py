@@ -75,7 +75,7 @@ def _hostile_review(base: Optional[str], model: str) -> int:
 def _selftest() -> int:
     outcome = selftest.run()
     sys.stdout.write(selftest.render(outcome))
-    return 0 if outcome.passed else EXIT_SELFTEST
+    return 0 if outcome.verdict == selftest.PASSED else EXIT_SELFTEST
 
 
 def _exit_cleanly_on_termination() -> None:
