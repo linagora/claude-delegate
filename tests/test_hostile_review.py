@@ -1,0 +1,233 @@
+from __future__ import annotations
+
+import json
+import unittest
+from pathlib import Path
+from typing import List
+
+from tests.support import FINDING, Sandbox, success
+
+
+def option(argv: List[str], name: str) -> str:
+    """The value given to a command-line option."""
+    return argv[argv.index(name) + 1]
+
+
+def section(report: str, title: str) -> str:
+    """The body of a `## title` section of a Markdown report."""
+    body = report.split(f"\n## {title}\n", 1)[1]
+    return body.split("\n## ", 1)[0].strip()
+
+
+class HostileReviewTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.sb = Sandbox()
+        self.addCleanup(self.sb.cleanup)
+        self.sb.init_repo()
+        self.sb.git("switch", "-q", "-c", "feature")
+        self.sb.write("app.py", "def div(a, b):\n    return a / b if b else 0\n")
+        self.sb.commit_all("feature change")
+
+    def test_review_reports_the_delegate_findings(self) -> None:
+        result = self.sb.run("hostile-review", "main")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Division par zéro non gérée", result.stdout)
+
+    def test_reviewer_reads_changes_since_the_merge_base_including_uncommitted_ones(self) -> None:
+        self.sb.git("switch", "-q", "main")
+        self.sb.write("drift.py", "DRIFT_ON_MAIN = 1\n")
+        self.sb.commit_all("main moves on")
+        self.sb.git("switch", "-q", "feature")
+        self.sb.write("staged.py", "STAGED_CHANGE = 1\n")
+        self.sb.git("add", "staged.py")
+        self.sb.write("app.py", "def div(a, b):\n    return a / b if b else UNSTAGED_CHANGE\n")
+
+        result = self.sb.run("hostile-review", "main")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        reviewed = self.sb.fake.last_call()["stdin"]
+        self.assertIn("STAGED_CHANGE", reviewed)
+        self.assertIn("UNSTAGED_CHANGE", reviewed)
+        self.assertNotIn("DRIFT_ON_MAIN", reviewed)
+
+    def test_reviewer_is_read_only_and_ignores_project_configuration(self) -> None:
+        self.sb.run("hostile-review", "main")
+
+        argv = self.sb.fake.last_call()["argv"]
+        self.assertIn("-p", argv)
+        self.assertIn("--restricted", argv)
+        self.assertEqual(option(argv, "--tools"), "Read,Grep,Glob")
+        self.assertIn("--strict-mcp-config", argv)
+        self.assertEqual(option(argv, "--permission-mode"), "dontAsk")
+        self.assertIn("--no-session-persistence", argv)
+        deny = json.loads(option(argv, "--settings"))["permissions"]["deny"]
+        self.assertEqual(
+            set(deny), {"Read(**/.env)", "Read(**/.env.*)", "Read(**/.claude/settings*.json)"}
+        )
+
+    def test_reviewer_is_opus_with_bounded_turns_and_budget(self) -> None:
+        self.sb.run("hostile-review", "main")
+
+        argv = self.sb.fake.last_call()["argv"]
+        self.assertEqual(option(argv, "--model"), "opus")
+        self.assertEqual(option(argv, "--effort"), "high")
+        self.assertEqual(option(argv, "--max-turns"), "30")
+        self.assertEqual(option(argv, "--max-budget-usd"), "5")
+
+    def test_reviewer_must_answer_with_the_findings_schema(self) -> None:
+        self.sb.run("hostile-review", "main")
+
+        schema = json.loads(option(self.sb.fake.last_call()["argv"], "--json-schema"))
+        finding = schema["properties"]["findings"]["items"]
+        self.assertEqual(set(schema["required"]), {"summary", "findings"})
+        self.assertEqual(finding["properties"]["severity"]["enum"], ["bloquant", "important", "mineur"])
+        self.assertEqual(
+            set(finding["required"]),
+            {"severity", "file", "line", "problem", "failure_scenario", "fix"},
+        )
+
+    def test_reviewer_gets_the_hostile_prompt_and_works_from_the_repository_root(self) -> None:
+        (self.sb.repo / "pkg").mkdir()
+
+        self.sb.run("hostile-review", "main", cwd=self.sb.repo / "pkg")
+
+        call = self.sb.fake.last_call()
+        self.assertEqual(call["cwd"], str(self.sb.repo))
+        self.assertIn("Pars du principe que le code est faux", call["system_prompt"] or "")
+
+    def test_reviewer_environment_is_rebuilt_from_scratch(self) -> None:
+        session_env = {
+            "ANTHROPIC_BASE_URL": "https://api.deepseek.com/anthropic",
+            "ANTHROPIC_AUTH_TOKEN": "sk-deepseek",
+            "ANTHROPIC_DEFAULT_OPUS_MODEL": "deepseek-flash",
+            "CLAUDE_CODE_EFFORT_LEVEL": "low",
+            "CLAUDE_CODE_USE_BEDROCK": "1",
+            "LITELLM_API_KEY": "sk-litellm",
+            "GH_TOKEN": "ghp_secret",
+            "USER": "alice",
+            "LOGNAME": "alice",
+            "LANG": "fr_FR.UTF-8",
+            "LC_ALL": "fr_FR.UTF-8",
+            "TERM": "xterm-256color",
+            "TMPDIR": "/tmp/alice",
+        }
+
+        self.sb.run("hostile-review", "main", extra_env=session_env)
+
+        env = self.sb.fake.last_call()["env"]
+        self.assertEqual(env.get("CLAUDE_CONFIG_DIR"), str(self.sb.home / ".claude-anthropic"))
+        added_by_the_os = {"__CF_USER_TEXT_ENCODING"}  # macOS sets it in every process
+        self.assertEqual(
+            set(env) - {"CLAUDE_CONFIG_DIR"} - added_by_the_os,
+            {"HOME", "PATH", "USER", "LOGNAME", "LANG", "LC_ALL", "TERM", "TMPDIR"},
+        )
+
+    def test_findings_are_numbered_by_severity_and_empty_sections_say_so(self) -> None:
+        self.sb.fake.reply(
+            success(
+                findings=[
+                    {**FINDING, "severity": "mineur", "line": None, "problem": "Nom trompeur"},
+                    {**FINDING, "severity": "bloquant", "problem": "Division par zéro non gérée"},
+                ]
+            )
+        )
+
+        report = self.sb.run("hostile-review", "main").stdout
+
+        self.assertIn("F1 · app.py:2", section(report, "Bloquant"))
+        self.assertIn("Division par zéro non gérée", section(report, "Bloquant"))
+        self.assertEqual(section(report, "Important"), "Rien à signaler.")
+        self.assertIn("F2 · app.py\n", section(report, "Mineur") + "\n")
+        self.assertIn("Nom trompeur", section(report, "Mineur"))
+
+    def test_report_is_archived_outside_the_repository_and_its_path_comes_first(self) -> None:
+        result = self.sb.run("hostile-review", "main")
+
+        first_line, _, rest = result.stdout.partition("\n")
+        self.assertTrue(first_line.startswith("Rapport : "), first_line)
+        report = Path(first_line[len("Rapport : ") :])
+        companion = report.with_suffix(".json")
+        self.assertTrue(report.is_relative_to(self.sb.state / "claude-delegate"))
+        self.assertEqual(report.read_text(encoding="utf-8"), rest.lstrip("\n"))
+        self.assertEqual(json.loads(companion.read_text(encoding="utf-8"))["findings"][0]["id"], "F1")
+        self.assertEqual({p.name for p in report.parent.iterdir()}, {report.name, companion.name})
+
+    def test_report_header_says_what_was_reviewed_and_which_model_answered(self) -> None:
+        self.sb.fake.reply(success(model="claude-opus-5-5-20261001"))
+        merge_base = self.sb.git("merge-base", "main", "HEAD")
+
+        report = self.sb.run("hostile-review", "main").stdout
+
+        self.assertIn("| Modèle | claude-opus-5-5-20261001 |", report)
+        self.assertIn(f"| Base | main (merge-base {merge_base[:12]}) |", report)
+        self.assertRegex(report, r"\| Identifiant \| \d{8}T\d{6}Z-hostile-[0-9a-f]{6} \|")
+        self.assertRegex(report, r"\| Date \(UTC\) \| \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \|")
+
+    def test_reports_are_filed_under_the_origin_repository_without_credentials(self) -> None:
+        expected = self.sb.state / "claude-delegate" / "github.com" / "linagora" / "claude-delegate"
+        self.sb.git("remote", "add", "origin", "git@github.com:linagora/claude-delegate.git")
+        for url in [
+            "git@github.com:linagora/claude-delegate.git",
+            "https://alice:ghp_secret@github.com/linagora/claude-delegate.git",
+        ]:
+            with self.subTest(url=url):
+                self.sb.git("remote", "set-url", "origin", url)
+
+                first_line = self.sb.run("hostile-review", "main").stdout.partition("\n")[0]
+
+                self.assertEqual(Path(first_line[len("Rapport : ") :]).parent, expected)
+
+    def test_default_base_is_the_default_branch_of_origin(self) -> None:
+        origin = self.sb.root / "origin.git"
+        self.sb.git("init", "-q", "--bare", "-b", "develop", str(origin), cwd=self.sb.root)
+        self.sb.git("switch", "-q", "-c", "develop", "main")
+        self.sb.write("develop.py", "DEVELOP_CHANGE = 1\n")
+        self.sb.commit_all("develop work")
+        self.sb.git("remote", "add", "origin", str(origin))
+        self.sb.git("push", "-q", "origin", "develop")
+        self.sb.git("remote", "set-head", "origin", "-a")
+        self.sb.git("switch", "-q", "-c", "topic", "develop")
+        self.sb.write("topic.py", "TOPIC_CHANGE = 1\n")
+        self.sb.commit_all("topic work")
+
+        result = self.sb.run("hostile-review")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("| Base | origin/develop (merge-base", result.stdout)
+        reviewed = self.sb.fake.last_call()["stdin"]
+        self.assertIn("TOPIC_CHANGE", reviewed)
+        self.assertNotIn("DEVELOP_CHANGE", reviewed)
+
+    def test_default_base_falls_back_to_main_without_origin(self) -> None:
+        result = self.sb.run("hostile-review")
+
+        self.assertIn("| Base | main (merge-base", result.stdout)
+
+    def test_a_failed_review_is_reported_on_stderr_and_archives_nothing(self) -> None:
+        quota = {
+            **success(),
+            "is_error": True,
+            "terminal_reason": "api_error",
+            "result": "You've hit your weekly limit · resets Oct 6 at 10am (Europe/Paris)",
+        }
+        no_structured_output = {k: v for k, v in success().items() if k != "structured_output"}
+        for name, reply, exit_code in [
+            ("erreur signalée", json.dumps(quota), 1),
+            ("sortie illisible", "Error: something broke", 1),
+            ("sans sortie structurée", json.dumps(no_structured_output), 0),
+        ]:
+            with self.subTest(name):
+                self.sb.fake.reply_raw(reply, exit_code)
+
+                result = self.sb.run("hostile-review", "main")
+
+                self.assertNotEqual(result.returncode, 0)
+                self.assertTrue(result.stderr.startswith("claude-delegate : "), result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
+                self.assertEqual(result.stdout, "")
+                self.assertEqual(list(self.sb.state.rglob("*.md")), [])
+
+
+if __name__ == "__main__":
+    unittest.main()

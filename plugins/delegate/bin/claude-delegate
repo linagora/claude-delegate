@@ -1,0 +1,17 @@
+#!/usr/bin/env python3
+"""Entry point of the claude-delegate CLI, run by the plugin's slash commands."""
+
+import logging
+import sys
+from pathlib import Path
+
+# Some Python builds (e.g. a pyenv build missing blake2) log a traceback to
+# stderr when hashlib is imported, although sha256 works. That noise would be
+# injected into the session with the report, so the root logger is muted.
+logging.getLogger().addHandler(logging.NullHandler())
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from claude_delegate.cli import main  # noqa: E402
+
+sys.exit(main(sys.argv[1:]))
