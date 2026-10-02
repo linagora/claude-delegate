@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import unittest
+from typing import Dict, Optional
 
 from tests.support import FeatureBranchTestCase
 
@@ -9,12 +10,12 @@ SECTION = "## Conventions du projet (version de confiance)"
 
 
 class ConventionsTest(FeatureBranchTestCase):
-    def on_main(self, files: dict, links: dict = {}) -> None:
+    def on_main(self, files: Dict[str, str], links: Optional[Dict[str, str]] = None) -> None:
         """Commit files (and symlinks) on main, then put the feature branch back on top of it."""
         self.sb.git("switch", "-q", "main")
         for name, content in files.items():
             self.sb.write(name, content)
-        for name, target in links.items():
+        for name, target in (links or {}).items():
             os.symlink(target, self.sb.repo / name)
         self.sb.commit_all("conventions")
         self.sb.git("switch", "-q", "feature")

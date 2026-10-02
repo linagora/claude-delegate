@@ -33,6 +33,20 @@ HOSTILE_REVIEW: Dict[str, Any] = {
 }
 
 
+#: What the selftest's reviewer reports: what it could read, and the project
+#: codeword it believes its instructions give.
+SELFTEST: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "outside_file": {"type": ["string", "null"]},
+        "env_file": {"type": ["string", "null"]},
+        "codeword": {"type": ["string", "null"]},
+        "tools": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["outside_file", "env_file", "codeword", "tools"],
+}
+
+
 def is_review(value: Any) -> bool:
     """Whether a structured output honours HOSTILE_REVIEW."""
     if not isinstance(value, dict) or not isinstance(value.get("summary"), str):

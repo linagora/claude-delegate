@@ -4,14 +4,8 @@ import hashlib
 import json
 import re
 import unittest
-from typing import List
 
-from tests.support import PLUGIN, SAMPLE_FINDING, FeatureBranchTestCase, report_path, success
-
-
-def option(argv: List[str], name: str) -> str:
-    """The value given to a command-line option."""
-    return argv[argv.index(name) + 1]
+from tests.support import PLUGIN, SAMPLE_FINDING, FeatureBranchTestCase, option, report_path, success
 
 
 def section(report: str, title: str) -> str:

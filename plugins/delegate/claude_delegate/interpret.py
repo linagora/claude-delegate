@@ -6,7 +6,7 @@ import json
 import re
 import subprocess
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from . import schemas
 from .errors import EXIT_INCOMPLETE, EXIT_INVALID_OUTPUT, EXIT_QUOTA, DelegateError
@@ -17,6 +17,9 @@ from .errors import EXIT_INCOMPLETE, EXIT_INVALID_OUTPUT, EXIT_QUOTA, DelegateEr
 _USAGE_LIMIT = re.compile(r"hit your [^\n]*limit|limit reached|out of (?:extra )?usage", re.IGNORECASE)
 #: The reset time ends at the end of the line or at the next separator.
 _RESETS = re.compile(r"\bresets\s+([^\n·∙|]+)", re.IGNORECASE)
+
+#: The reviewer's dedicated config dir has no Anthropic login yet.
+_NOT_LOGGED_IN = re.compile(r"not logged in|please run /login|invalid api key", re.IGNORECASE)
 
 #: Results cut short by the review's own caps.
 _INCOMPLETE = {
@@ -56,7 +59,8 @@ class Review:
     permission_denials: Optional[List[str]]
 
 
-def read_review(done: "subprocess.CompletedProcess[str]") -> Review:
+def read_result(done: "subprocess.CompletedProcess[str]") -> Dict[str, Any]:
+    """The delegated session's JSON result, or a typed DelegateError when it failed."""
     try:
         payload = json.loads(done.stdout)
     except ValueError:
@@ -66,12 +70,17 @@ def read_review(done: "subprocess.CompletedProcess[str]") -> Review:
     if not isinstance(payload, dict):
         raise DelegateError(f"sortie inattendue du délégué : {_excerpt(done.stdout)}")
     _raise_on_failure(payload, done.returncode)
+    return payload
+
+
+def read_review(done: "subprocess.CompletedProcess[str]") -> Review:
+    payload = read_result(done)
     structured = payload.get("structured_output")
     if not isinstance(structured, dict) or not schemas.is_review(structured):
         raise DelegateError(_INVALID_OUTPUT, EXIT_INVALID_OUTPUT)
     cost = payload.get("total_cost_usd")
     duration = payload.get("duration_ms")
-    denials = payload.get("permission_denials")
+    refused = refusals(payload)
     return Review(
         summary=structured["summary"],
         findings=_numbered(structured["findings"]),
@@ -81,8 +90,8 @@ def read_review(done: "subprocess.CompletedProcess[str]") -> Review:
         duration_s=duration / 1000 if isinstance(duration, (int, float)) else None,
         permission_denials=(
             # Deduplicated, in order: the reviewer often retries a refused call.
-            list(dict.fromkeys(_denial(d) for d in denials if isinstance(d, dict)))
-            if isinstance(denials, list)
+            list(dict.fromkeys(f"{tool} {target}".strip() for tool, target in refused))
+            if refused is not None
             else None
         ),
     )
@@ -92,14 +101,22 @@ def _int_or_none(value: Any) -> Optional[int]:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
-def _denial(denial: Dict[str, Any]) -> str:
-    """`Read /repo/.env`: the refused tool and what it targeted."""
+def refusals(payload: Dict[str, Any]) -> Optional[List[Tuple[str, str]]]:
+    """(tool, target) for each permission the session was refused, such as
+    ("Read", "/repo/.env"); None when the result does not say."""
+    denials = payload.get("permission_denials")
+    if not isinstance(denials, list):
+        return None
+    return [_refusal(denial) for denial in denials if isinstance(denial, dict)]
+
+
+def _refusal(denial: Dict[str, Any]) -> Tuple[str, str]:
     target = denial.get("tool_input")
     if isinstance(target, dict):
         what = next((str(target[k]) for k in ("file_path", "path", "pattern", "command") if target.get(k)), "")
     else:
         what = target if isinstance(target, str) else ""
-    return f"{denial.get('tool_name', '?')} {what}".strip()
+    return str(denial.get("tool_name", "?")), what
 
 
 def _raise_on_failure(payload: Dict[str, Any], returncode: int) -> None:
@@ -117,6 +134,11 @@ def _raise_on_failure(payload: Dict[str, Any], returncode: int) -> None:
         resets = _RESETS.search(reason)
         when = f" (reprise : {resets.group(1).strip().rstrip('.')})" if resets else ""
         raise DelegateError(f"quota Claude épuisé{when}", EXIT_QUOTA)
+    if _NOT_LOGGED_IN.search(reason):
+        raise DelegateError(
+            "le relecteur n'est pas connecté à Anthropic : lance une fois "
+            "`CLAUDE_CONFIG_DIR=~/.claude-anthropic claude`, puis /login"
+        )
     if payload.get("api_error_status") == 429:
         raise DelegateError(f"limite de débit Claude atteinte : {_excerpt(reason)}", EXIT_QUOTA)
     raise DelegateError(f"la revue a échoué : {_excerpt(reason)}")

@@ -30,6 +30,14 @@ Prérequis : Claude Code (de préférence le binaire natif, `~/.local/bin/claude
 
    Ne la mets pas dans un `~/.claude/settings.json` partagé avec tes sessions Anthropic : elle s'appliquerait à tous leurs appels Bash.
 
+4. **Vérifier l'isolation** du relecteur, après l'installation puis après chaque mise à jour de Claude Code :
+
+   ```
+   /delegate:selftest
+   ```
+
+   Le selftest construit un projet piégé et demande au relecteur d'en sortir : lire hors du dépôt et `.env`, écrire, lancer un shell. Il vérifie aussi que le hook, le serveur MCP et le `CLAUDE.md` du projet n'agissent pas. Il tourne sur Haiku et coûte quelques centimes. Plusieurs garanties reposent sur un comportement non documenté de `--restricted` : si une vérification n'est pas « OK », n'utilise pas la délégation avant d'en avoir compris la cause.
+
 ## Utilisation
 
 ```
@@ -79,6 +87,7 @@ L'en-tête du rapport indique comment la revue a tourné :
 | 5 | Revue incomplète : plafond de budget ou nombre maximal de tours atteint |
 | 6 | Sortie structurée du relecteur absente ou non conforme |
 | 7 | Autre échec de la session déléguée, ou rapport impossible à archiver |
+| 8 | Selftest en échec : l'isolation du relecteur n'est plus garantie |
 
 En cas d'échec, rien n'est archivé et le message part sur la sortie d'erreur. Claude Code annule alors la commande et affiche ce message.
 

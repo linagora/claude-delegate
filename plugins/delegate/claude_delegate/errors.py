@@ -7,6 +7,7 @@ EXIT_QUOTA = 4  #: the Claude usage limit is reached
 EXIT_INCOMPLETE = 5  #: the review hit its budget or turn limit
 EXIT_INVALID_OUTPUT = 6  #: the structured output is missing or off-schema
 EXIT_DELEGATE = 7  #: any other failure of the delegated session
+EXIT_SELFTEST = 8  #: the platform no longer isolates the reviewer
 
 
 class DelegateError(Exception):
