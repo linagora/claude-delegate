@@ -9,12 +9,14 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 ROOT = Path(__file__).resolve().parent.parent
 PLUGIN = ROOT / "plugins" / "delegate"
@@ -235,6 +237,37 @@ class Sandbox:
             capture_output=True,
             text=True,
         )
+
+
+def interrupt_review(
+    sb: Sandbox, args: Sequence[str], signum: int, extra_env: Optional[Dict[str, str]] = None
+) -> Tuple[Dict[str, Any], int]:
+    """Run the CLI, send it `signum` once the (sleeping) fake reviewer is
+    called, and wait for it to exit: returns that reviewer call and the exit code."""
+    process = subprocess.Popen(
+        [sys.executable, str(BIN), *args],
+        cwd=sb.repo,
+        env={**sb.env(), **(extra_env or {})},
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        preexec_fn=_default_sigint,
+    )
+    try:
+        deadline = time.monotonic() + 15
+        while not sb.fake.calls() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        call = sb.fake.last_call()
+        process.send_signal(signum)
+        process.communicate(timeout=15)
+    finally:
+        process.kill()
+    return call, process.returncode
+
+
+def _default_sigint() -> None:
+    """A shell starts background jobs with SIGINT ignored, which the CLI would
+    inherit when the suite runs in the background: Ctrl+C is restored."""
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 
 class FeatureBranchTestCase(unittest.TestCase):

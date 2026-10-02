@@ -5,13 +5,18 @@ import os
 import shlex
 import shutil
 import signal
-import subprocess
-import sys
-import time
 import unittest
 from typing import Any, Dict
 
-from tests.support import BIN, PLUGIN, SAMPLE_FINDING, PullRequestTestCase, option, report_path, success
+from tests.support import (
+    PLUGIN,
+    SAMPLE_FINDING,
+    PullRequestTestCase,
+    interrupt_review,
+    option,
+    report_path,
+    success,
+)
 
 PREPARATION_FAILURE = 3
 USAGE_ERROR = 2
@@ -171,23 +176,10 @@ class PullRequestReviewTest(PullRequestTestCase):
 
     def test_an_interrupted_review_removes_the_worktree(self) -> None:
         self.sb.fake.reply(reviewed(), sleep=30)
-        process = subprocess.Popen(
-            [sys.executable, str(BIN), "pr-review", self.NUMBER],
-            cwd=self.sb.repo,
-            env={**self.sb.env(), "PATH": self.path_with_gh()},
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        self.addCleanup(process.kill)
-        deadline = time.monotonic() + 15
-        while not self.sb.fake.calls() and time.monotonic() < deadline:
-            time.sleep(0.05)
-        tree = self.sb.fake.last_call()["cwd"]
 
-        process.send_signal(signal.SIGINT)
-        process.communicate(timeout=15)
+        call, _ = interrupt_review(self.sb, ["pr-review", self.NUMBER], signal.SIGINT, {"PATH": self.path_with_gh()})
 
-        self.assertFalse(os.path.exists(tree))
+        self.assertFalse(os.path.exists(call["cwd"]))
         self.assertEqual(self.worktrees(), 1)
 
     def test_a_force_pushed_pull_request_can_be_reviewed_again(self) -> None:
