@@ -6,16 +6,13 @@ import hashlib
 import json
 import os
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import policy
 from .errors import EXIT_PREPARATION, DelegateError
-
-#: The plugin's prompts. ${CLAUDE_PLUGIN_ROOT} is not exported to the shell, so
-#: the CLI finds them from its own location.
-PROMPTS = Path(__file__).resolve().parent.parent / "prompts"
 
 #: Reads the reviewer must never perform, even inside the reviewed tree.
 DENIED_READS = [f"Read({path})" for path in policy.DENIED_PATHS]
@@ -47,7 +44,7 @@ def launch(
     root: Path,
     task_input: str,
     schema: Dict[str, Any],
-    prompt_file: Path,
+    system_prompt: str,
     instruction: str,
     *,
     model: str,
@@ -57,19 +54,22 @@ def launch(
     execution = Execution(
         requested_model=model,
         effort=EFFORT,
-        prompt_sha256=hashlib.sha256(prompt_file.read_bytes()).hexdigest(),
+        prompt_sha256=hashlib.sha256(system_prompt.encode("utf-8")).hexdigest(),
         claude_code_version=claude_code_version(binary),
     )
     try:
-        done = subprocess.run(
-            _command(binary, model, schema, prompt_file, instruction),
-            input=task_input,
-            cwd=root,
-            env=_environment(),
-            capture_output=True,
-            encoding="utf-8",
-            errors="replace",
-        )
+        with tempfile.TemporaryDirectory(prefix="claude-delegate-") as tmp:
+            prompt_file = Path(tmp) / "system-prompt.md"
+            prompt_file.write_text(system_prompt, encoding="utf-8")
+            done = subprocess.run(
+                _command(binary, model, schema, prompt_file, instruction),
+                input=task_input,
+                cwd=root,
+                env=_environment(),
+                capture_output=True,
+                encoding="utf-8",
+                errors="replace",
+            )
     except OSError as error:
         raise DelegateError(
             f"binaire claude introuvable ou non exécutable : {binary} ({error.strerror})", EXIT_PREPARATION

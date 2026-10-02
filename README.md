@@ -47,6 +47,17 @@ La revue ne démarre pas, avec le code de sortie 3, dans ces cas :
 - il n'y a rien à relire ;
 - le diff dépasse 1 000 000 caractères.
 
+Le relecteur connaît les conventions du projet. Le CLI lui fournit le `CLAUDE.md` racine tel qu'il est au merge-base, ou sa cible s'il s'agit d'un lien symbolique, avec ses imports `@chemin` lus dans la même révision. Une modification de `CLAUDE.md` dans les changements relus n'apparaît que dans le diff : elle est relue comme le reste du code, jamais suivie comme une consigne.
+
+Règles des imports :
+
+- un import n'est suivi que vers un fichier du dépôt : jamais vers `~`, un chemin absolu, un répertoire ou un fichier interdit ;
+- un import qu'on ne peut pas suivre est remplacé par la mention « import ignoré » ;
+- les imports placés dans un bloc de code ne sont pas évalués ;
+- les conventions sont bornées à 20 fichiers importés et à 100 000 caractères.
+
+Si git ne peut pas lire les conventions, la revue s'arrête avec le code de sortie 3.
+
 Le relecteur est Opus par défaut. `--model sonnet` le remplace par Sonnet, et aucun autre modèle n'est accepté.
 
 L'en-tête du rapport indique comment la revue a tourné :
@@ -78,7 +89,7 @@ Depuis un terminal : `<dossier du plugin>/bin/claude-delegate hostile-review [ba
 ## Isolation de la session déléguée
 
 - **Lecture seule** : `--restricted --tools "Read,Grep,Glob"`. Pas de shell, pas de web, pas d'écriture, et des lectures confinées au dépôt relu.
-- **Configuration ignorée** : les settings, hooks, règles d'autorisation et `CLAUDE.md` du projet ne sont pas chargés, ni les serveurs MCP (`--strict-mcp-config`). En cas de demande non autorisée, le refus est automatique (`--permission-mode dontAsk`).
+- **Configuration ignorée** : les settings, hooks, règles d'autorisation et `CLAUDE.md` du projet ne sont pas chargés par Claude Code, ni les serveurs MCP (`--strict-mcp-config`). Seule la version de confiance de `CLAUDE.md`, fournie par le CLI, lui est donnée comme consigne. En cas de demande non autorisée, le refus est automatique (`--permission-mode dontAsk`).
 - **Fichiers interdits** : `**/.env`, `**/.env.*` et `**/.claude/settings*.json`. Le relecteur ne peut pas les lire, et ils sont exclus du diff qu'il reçoit.
 - **Environnement reconstruit à partir de rien** : seules `HOME`, `USER`, `LOGNAME`, `PATH`, `LANG`, `LC_*`, `TERM` et `TMPDIR` passent, plus `CLAUDE_CONFIG_DIR=~/.claude-anthropic`. Aucune variable `ANTHROPIC_*` ou `CLAUDE_CODE_*` ni aucun jeton.
 - **Coût borné** : effort `high`, 30 tours au plus, et un plafond de 5 $ estimés. Ce plafond est souple : Claude Code le vérifie après chaque appel, il peut donc être dépassé d'un appel.
