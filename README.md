@@ -95,6 +95,14 @@ Le rapport (constats Bloquant, Important et Mineur) est archivé dans `${XDG_STA
 
 Depuis un terminal : `<dossier du plugin>/bin/claude-delegate hostile-review [base]`.
 
+### Préparer une spec
+
+```
+/delegate:handoff <sujet>
+```
+
+Les specs ne sont pas déléguées : elles s'écrivent dans une session Claude Code sur Anthropic, avec `grill-me` puis `to-spec`. Cette commande fait écrire par DeepSeek un brief daté dans `docs/specs/brief-AAAAMMJJ-<sujet>.md`. Il contient le contexte, l'objectif, les décisions déjà prises, les contraintes, les questions ouvertes, ainsi que les fichiers et références utiles. La session Anthropic n'a ensuite qu'à partir de ce brief.
+
 ## Isolation de la session déléguée
 
 - **Lecture seule** : `--restricted --tools "Read,Grep,Glob"`. Pas de shell, pas de web, pas d'écriture, et des lectures confinées au dépôt relu.
