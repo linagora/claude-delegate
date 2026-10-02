@@ -169,7 +169,7 @@ class RecheckTest(FeatureBranchTestCase):
 
     def test_an_unknown_report_is_refused(self) -> None:
         self.review_then_fix()
-        for designation in ["20200101T000000Z-hostile-000000", "inexistant.md"]:
+        for designation in ["20200101T000000Z-hostile-000000", "inexistant.md", ".", "/", ".."]:
             with self.subTest(designation=designation):
                 self.assert_refused([designation], "rapport introuvable")
 

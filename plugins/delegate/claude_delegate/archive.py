@@ -62,12 +62,16 @@ def is_report_id(text: str) -> bool:
 def find(directory: Path, designation: str) -> Path:
     """The companion of a report designated by its identifier, looked up in
     `directory`, or by the path of its Markdown or JSON."""
+    missing = DelegateError(f"rapport introuvable : {designation}", EXIT_PREPARATION)
     if is_report_id(designation):
         companion = directory / f"{designation}.json"
     else:
-        companion = Path(designation).with_suffix(".json")
+        try:
+            companion = Path(designation).with_suffix(".json")
+        except ValueError:  # no file name, as in "." or "/"
+            raise missing from None
     if not companion.is_file():
-        raise DelegateError(f"rapport introuvable : {designation}", EXIT_PREPARATION)
+        raise missing
     return companion
 
 
