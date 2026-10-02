@@ -122,7 +122,11 @@ def _model(payload: Dict[str, Any]) -> str:
 def _numbered(findings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Most severe first (model order kept within a severity), numbered F1, F2…"""
     ordered = sorted(findings, key=lambda f: schemas.SEVERITIES.index(f["severity"]))
-    return [{"id": f"F{n}", **finding} for n, finding in enumerate(ordered, start=1)]
+    fields = schemas.FINDING["required"]
+    return [
+        {"id": f"F{n}", **{field: finding[field] for field in fields}}
+        for n, finding in enumerate(ordered, start=1)
+    ]
 
 
 def _environment() -> Dict[str, str]:

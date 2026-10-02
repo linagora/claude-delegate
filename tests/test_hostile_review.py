@@ -141,6 +141,22 @@ class HostileReviewTest(unittest.TestCase):
         self.assertIn("F2 · app.py\n", section(report, "Mineur") + "\n")
         self.assertIn("Nom trompeur", section(report, "Mineur"))
 
+    def test_findings_get_the_cli_identifiers_whatever_the_model_proposes(self) -> None:
+        self.sb.fake.reply(
+            success(
+                findings=[
+                    {**FINDING, "id": "BUG-7"},
+                    {**FINDING, "id": "BUG-7", "problem": "Un second défaut"},
+                ]
+            )
+        )
+
+        report = self.sb.run("hostile-review", "main").stdout
+
+        self.assertIn("### F1 · app.py:2", report)
+        self.assertIn("### F2 · app.py:2", report)
+        self.assertNotIn("BUG-7", report)
+
     def test_report_is_archived_outside_the_repository_and_its_path_comes_first(self) -> None:
         result = self.sb.run("hostile-review", "main")
 
