@@ -78,6 +78,18 @@ class FailureTest(FeatureBranchTestCase):
 
         self.assert_failure(DELEGATE_FAILURE, "Tool crashed: boom")
 
+    def test_a_report_that_cannot_be_archived_is_reported_without_crashing(self) -> None:
+        self.sb.state.mkdir()
+        self.sb.state.chmod(0o500)
+        self.addCleanup(self.sb.state.chmod, 0o700)
+
+        result = self.sb.run("hostile-review", "main")
+
+        self.assertEqual(result.returncode, DELEGATE_FAILURE, result.stderr)
+        self.assertIn("impossible d'archiver le rapport", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertEqual(result.stdout, "")
+
     def test_any_other_error_is_a_delegate_failure(self) -> None:
         for name, stdout, code in [
             ("erreur signalée", json.dumps(failed(result="Internal server error")), 1),

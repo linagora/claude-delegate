@@ -56,6 +56,9 @@ def _hostile_review(base: Optional[str], model: str) -> int:
         review=interpret.read_review(done),
     )
     markdown = hostile.markdown()
-    path = archive.save(archive.state_dir() / hostile.repo, hostile.id, markdown, hostile.companion())
+    try:
+        path = archive.save(archive.state_dir() / hostile.repo, hostile.id, markdown, hostile.companion())
+    except OSError as error:
+        raise DelegateError(f"impossible d'archiver le rapport : {error}") from None
     sys.stdout.write(f"Rapport : {path}\n\n{markdown}")
     return 0
