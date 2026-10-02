@@ -56,7 +56,8 @@ class Review:
     permission_denials: Optional[List[str]]
 
 
-def read_review(done: "subprocess.CompletedProcess[str]") -> Review:
+def read_result(done: "subprocess.CompletedProcess[str]") -> Dict[str, Any]:
+    """The delegated session's JSON result, or a typed DelegateError when it failed."""
     try:
         payload = json.loads(done.stdout)
     except ValueError:
@@ -66,6 +67,11 @@ def read_review(done: "subprocess.CompletedProcess[str]") -> Review:
     if not isinstance(payload, dict):
         raise DelegateError(f"sortie inattendue du délégué : {_excerpt(done.stdout)}")
     _raise_on_failure(payload, done.returncode)
+    return payload
+
+
+def read_review(done: "subprocess.CompletedProcess[str]") -> Review:
+    payload = read_result(done)
     structured = payload.get("structured_output")
     if not isinstance(structured, dict) or not schemas.is_review(structured):
         raise DelegateError(_INVALID_OUTPUT, EXIT_INVALID_OUTPUT)
