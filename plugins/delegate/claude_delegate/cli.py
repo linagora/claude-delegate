@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
-from . import __version__, archive, delegate, gitctx, interpret, report, schemas
+from . import __version__, archive, delegate, gitctx, interpret, prompts, report, schemas
 from .errors import DelegateError
 
 
@@ -42,7 +42,7 @@ def _hostile_review(base: Optional[str], model: str) -> int:
         ctx.root,
         ctx.diff,
         schemas.HOSTILE_REVIEW,
-        delegate.PROMPTS / "hostile-review.md",
+        prompts.hostile_review(ctx.conventions),
         "Revue hostile du diff fourni sur l'entrée standard.",
         model=model,
     )

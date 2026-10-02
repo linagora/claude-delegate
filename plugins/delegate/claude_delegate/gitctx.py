@@ -37,6 +37,8 @@ class HostileContext:
     merge_base: str
     reviewed_revision: str
     diff: str
+    #: The root CLAUDE.md at the merge-base, never from the reviewed work.
+    conventions: Optional[str]
 
 
 def hostile_context(cwd: Path, base: Optional[str]) -> HostileContext:
@@ -70,7 +72,14 @@ def hostile_context(cwd: Path, base: Optional[str]) -> HostileContext:
         merge_base=merge_base,
         reviewed_revision=reviewed_revision,
         diff=diff,
+        conventions=trusted_conventions(root, merge_base),
     )
+
+
+def trusted_conventions(root: Path, revision: str) -> Optional[str]:
+    """The root CLAUDE.md as it is at `revision`, so the reviewed work cannot change it."""
+    done = _run(root, ("show", f"{revision}:CLAUDE.md"))
+    return done.stdout if done.returncode == 0 else None
 
 
 def default_base(root: Path) -> str:
