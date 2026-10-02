@@ -83,6 +83,28 @@ class ReviewedRevisionTest(FeatureBranchTestCase):
         self.assertIn("base introuvable : no-such-branch", result.stderr)
         self.assertEqual(self.sb.fake.calls(), [])
 
+    def test_every_preparation_failure_is_explained_without_calling_the_reviewer(self) -> None:
+        outside = self.sb.root / "outside"
+        outside.mkdir()
+        empty = self.sb.root / "empty"
+        empty.mkdir()
+        self.sb.git("init", "-q", "-b", "main", cwd=empty)
+        self.sb.git("switch", "-q", "--orphan", "lonely")
+        self.sb.write("lonely.py", "LONELY = 1\n")
+        self.sb.commit_all("unrelated history")
+        for name, cwd, message in [
+            ("hors d'un dépôt", outside, "pas un dépôt git"),
+            ("dépôt sans commit", empty, "aucun commit"),
+            ("historique sans ancêtre commun", self.sb.repo, "aucun ancêtre commun entre main et HEAD"),
+        ]:
+            with self.subTest(name):
+                result = self.sb.run("hostile-review", "main", cwd=cwd)
+
+                self.assertEqual(result.returncode, PREPARATION_FAILURE, result.stderr)
+                self.assertIn(message, result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
+                self.assertEqual(self.sb.fake.calls(), [])
+
     def test_nothing_to_review_fails_without_calling_the_reviewer(self) -> None:
         self.sb.git("switch", "-q", "main")
 

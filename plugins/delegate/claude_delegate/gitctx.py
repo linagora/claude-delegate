@@ -33,11 +33,18 @@ class HostileContext:
 
 
 def hostile_context(cwd: Path, base: Optional[str]) -> HostileContext:
-    root = Path(git(cwd, "rev-parse", "--show-toplevel"))
+    toplevel = _git_or_none(cwd, "rev-parse", "--show-toplevel")
+    if toplevel is None:
+        raise DelegateError(f"pas un dépôt git : {cwd}", EXIT_PREPARATION)
+    root = Path(toplevel)
+    if _git_or_none(root, "rev-parse", "--verify", "--quiet", "HEAD^{commit}") is None:
+        raise DelegateError("le dépôt n'a encore aucun commit", EXIT_PREPARATION)
     base = base or default_base(root)
     if _git_or_none(root, "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}") is None:
         raise DelegateError(f"base introuvable : {base}", EXIT_PREPARATION)
-    merge_base = git(root, "merge-base", base, "HEAD")
+    merge_base = _git_or_none(root, "merge-base", base, "HEAD")
+    if merge_base is None:
+        raise DelegateError(f"aucun ancêtre commun entre {base} et HEAD", EXIT_PREPARATION)
     snapshot = _snapshot(root)
     diff = git(root, "diff", "--no-color", "--no-ext-diff", merge_base, snapshot, strip=False)
     if not diff.strip():
@@ -65,7 +72,7 @@ def git(cwd: Path, *args: str, strip: bool = True, env: Optional[Dict[str, str]]
     """A git command the review cannot do without: its failure is reported."""
     done = _run(cwd, args, env)
     if done.returncode != 0:
-        raise DelegateError(f"git {' '.join(args)} a échoué : {done.stderr.strip()}")
+        raise DelegateError(f"git {' '.join(args)} a échoué : {done.stderr.strip()}", EXIT_PREPARATION)
     return done.stdout.strip() if strip else done.stdout
 
 
