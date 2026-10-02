@@ -85,6 +85,15 @@ class SelftestTest(unittest.TestCase):
         self.assertIn("ZEBRE-42", files["CLAUDE.md"])
         self.assertIn("FAUX_SECRET", files[".env"])
 
+    def test_malformed_permission_denials_do_not_crash_the_selftest(self) -> None:
+        payload = isolated()
+        payload["permission_denials"] = ["oops", *payload["permission_denials"], {"tool_name": "Read"}]
+        self.sb.fake.reply(payload)
+
+        result = self.sb.run("selftest")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_each_broken_guarantee_fails_the_selftest(self) -> None:
         for label, payload, touch in [
             (

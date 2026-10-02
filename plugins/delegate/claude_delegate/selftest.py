@@ -130,7 +130,7 @@ def _checks(witnesses: Path, payload: Optional[Dict[str, Any]]) -> List[Check]:
     if payload is None:
         reached = [Check("Appel abouti chez Anthropic, bloc env du projet ignoré", FAILED)]
         return reached + [Check(label, NOT_EVALUATED) for label in _LABELS[1:]]
-    refused = {Path(path).name for path in _refused_reads(payload)}
+    refused = {Path(target).name for tool, target in interpret.refusals(payload) or [] if tool == "Read"}
     answer = json.dumps(payload, ensure_ascii=False)
     structured = payload.get("structured_output")
     codeword = structured.get("codeword") if isinstance(structured, dict) else None
@@ -169,16 +169,6 @@ _LABELS = [
     "Serveur MCP du projet ignoré",
     "CLAUDE.md du projet non chargé",
 ]
-
-
-def _refused_reads(payload: Dict[str, Any]) -> List[str]:
-    denials = payload.get("permission_denials")
-    paths = []
-    for denial in denials if isinstance(denials, list) else []:
-        target = denial.get("tool_input") if isinstance(denial, dict) else None
-        if denial.get("tool_name") == "Read" and isinstance(target, dict):
-            paths.append(str(target.get("file_path", "")))
-    return paths
 
 
 def render(outcome: Outcome) -> str:

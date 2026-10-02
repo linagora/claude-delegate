@@ -6,7 +6,7 @@ import json
 import re
 import subprocess
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from . import schemas
 from .errors import EXIT_INCOMPLETE, EXIT_INVALID_OUTPUT, EXIT_QUOTA, DelegateError
@@ -77,7 +77,7 @@ def read_review(done: "subprocess.CompletedProcess[str]") -> Review:
         raise DelegateError(_INVALID_OUTPUT, EXIT_INVALID_OUTPUT)
     cost = payload.get("total_cost_usd")
     duration = payload.get("duration_ms")
-    denials = payload.get("permission_denials")
+    refused = refusals(payload)
     return Review(
         summary=structured["summary"],
         findings=_numbered(structured["findings"]),
@@ -87,8 +87,8 @@ def read_review(done: "subprocess.CompletedProcess[str]") -> Review:
         duration_s=duration / 1000 if isinstance(duration, (int, float)) else None,
         permission_denials=(
             # Deduplicated, in order: the reviewer often retries a refused call.
-            list(dict.fromkeys(_denial(d) for d in denials if isinstance(d, dict)))
-            if isinstance(denials, list)
+            list(dict.fromkeys(f"{tool} {target}".strip() for tool, target in refused))
+            if refused is not None
             else None
         ),
     )
@@ -98,14 +98,22 @@ def _int_or_none(value: Any) -> Optional[int]:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
-def _denial(denial: Dict[str, Any]) -> str:
-    """`Read /repo/.env`: the refused tool and what it targeted."""
+def refusals(payload: Dict[str, Any]) -> Optional[List[Tuple[str, str]]]:
+    """(tool, target) for each permission the session was refused, such as
+    ("Read", "/repo/.env"); None when the result does not say."""
+    denials = payload.get("permission_denials")
+    if not isinstance(denials, list):
+        return None
+    return [_refusal(denial) for denial in denials if isinstance(denial, dict)]
+
+
+def _refusal(denial: Dict[str, Any]) -> Tuple[str, str]:
     target = denial.get("tool_input")
     if isinstance(target, dict):
         what = next((str(target[k]) for k in ("file_path", "path", "pattern", "command") if target.get(k)), "")
     else:
         what = target if isinstance(target, str) else ""
-    return f"{denial.get('tool_name', '?')} {what}".strip()
+    return str(denial.get("tool_name", "?")), what
 
 
 def _raise_on_failure(payload: Dict[str, Any], returncode: int) -> None:
