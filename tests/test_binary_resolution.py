@@ -41,6 +41,14 @@ class BinaryResolutionTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(len(self.sb.fake.calls()), 1)
 
+    def test_the_override_wins_over_the_native_install(self) -> None:
+        self._executable(self.sb.home / ".local" / "bin" / "claude", "#!/bin/sh\nexit 97\n")
+
+        result = self.sb.run("hostile-review", "main")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(self.sb.fake.calls()), 1)
+
     def test_on_the_path_a_cmux_shim_is_skipped_for_the_real_binary(self) -> None:
         real = self.sb.root / "real-bin" / "claude"
         real.parent.mkdir()

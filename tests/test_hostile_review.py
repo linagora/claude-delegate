@@ -78,7 +78,9 @@ class HostileReviewTest(unittest.TestCase):
     def test_reviewer_must_answer_with_the_findings_schema(self) -> None:
         self.sb.run("hostile-review", "main")
 
-        schema = json.loads(option(self.sb.fake.last_call()["argv"], "--json-schema"))
+        argv = self.sb.fake.last_call()["argv"]
+        self.assertEqual(option(argv, "--output-format"), "json")
+        schema = json.loads(option(argv, "--json-schema"))
         finding = schema["properties"]["findings"]["items"]
         self.assertEqual(set(schema["required"]), {"summary", "findings"})
         self.assertEqual(finding["properties"]["severity"]["enum"], ["bloquant", "important", "mineur"])
