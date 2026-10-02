@@ -65,7 +65,7 @@ def is_review(value: Any) -> bool:
     if not isinstance(value, dict) or not isinstance(value.get("summary"), str):
         return False
     findings = value.get("findings")
-    return isinstance(findings, list) and all(_is_finding(f) for f in findings)
+    return isinstance(findings, list) and all(is_finding(f) for f in findings)
 
 
 def is_pr_review(value: Any) -> bool:
@@ -77,7 +77,8 @@ def is_pr_review(value: Any) -> bool:
     )
 
 
-def _is_finding(value: Any) -> bool:
+def is_finding(value: Any) -> bool:
+    """Whether a value honours FINDING."""
     if not isinstance(value, dict) or value.get("severity") not in SEVERITIES or "line" not in value:
         return False
     line = value["line"]
