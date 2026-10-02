@@ -27,17 +27,29 @@ class FailureTest(FeatureBranchTestCase):
         self.assertEqual(result.stdout, "")
         self.assertEqual(list(self.sb.state.rglob("*.md")), [])
 
-    def test_an_exhausted_quota_says_when_it_resets(self) -> None:
-        self.sb.fake.reply(
-            failed(
-                subtype="success",
-                terminal_reason="api_error",
-                result="You've hit your weekly limit · resets Oct 6 at 10am (Europe/Paris)",
+    def test_every_usage_limit_wording_is_an_exhausted_quota_with_its_reset_time(self) -> None:
+        for wording, expected in [
+            (
+                "You've hit your weekly limit · resets Oct 6 at 10am (Europe/Paris)",
+                "quota Claude épuisé (reprise : Oct 6 at 10am (Europe/Paris))",
             ),
-            exit_code=1,
-        )
+            ("You're out of extra usage · resets 3pm", "quota Claude épuisé (reprise : 3pm)"),
+            ("5-hour limit reached ∙ resets 3pm\nUpgrade for more usage", "quota Claude épuisé (reprise : 3pm)"),
+        ]:
+            with self.subTest(wording):
+                self.sb.fake.reply(failed(subtype="success", terminal_reason="api_error", result=wording), 1)
 
-        self.assert_failure(QUOTA_EXHAUSTED, "quota Claude épuisé (reprise : Oct 6 at 10am (Europe/Paris))")
+                self.assert_failure(QUOTA_EXHAUSTED, expected)
+
+    def test_an_exhausted_quota_without_reset_time_says_so_plainly(self) -> None:
+        self.sb.fake.reply(failed(subtype="success", result="Claude usage limit reached."), 1)
+
+        self.assert_failure(QUOTA_EXHAUSTED, "quota Claude épuisé\n")
+
+    def test_a_throttled_request_keeps_its_original_message(self) -> None:
+        self.sb.fake.reply(failed(subtype="success", api_error_status=429, result="Rate limited, retry later"), 1)
+
+        self.assert_failure(QUOTA_EXHAUSTED, "Rate limited, retry later")
 
     def test_a_review_stopped_by_its_budget_is_incomplete(self) -> None:
         self.sb.fake.reply(failed(subtype="error_max_budget_usd", terminal_reason="budget_exhausted"), 1)
