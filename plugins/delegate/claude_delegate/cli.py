@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import signal
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,6 +14,7 @@ from .errors import EXIT_SELFTEST, DelegateError
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    _exit_cleanly_on_termination()
     parser = argparse.ArgumentParser(
         prog="claude-delegate",
         description="Délègue des revues de code à une session Claude Code isolée sur Anthropic.",
@@ -74,3 +76,18 @@ def _selftest() -> int:
     outcome = selftest.run()
     sys.stdout.write(selftest.render(outcome))
     return 0 if outcome.passed else EXIT_SELFTEST
+
+
+def _exit_cleanly_on_termination() -> None:
+    """A timeout or a cancelled command sends SIGTERM (SIGHUP when the terminal
+    closes), which by default kills the CLI on the spot: the reviewer would keep
+    running and temporary files (trap, worktrees) would stay. Raising SystemExit
+    instead unwinds normally: subprocess.run kills the reviewer, and temporary
+    directories are removed."""
+
+    def terminate(signum: int, _frame: object) -> None:
+        raise SystemExit(128 + signum)
+
+    for name in ("SIGTERM", "SIGHUP"):
+        if hasattr(signal, name):
+            signal.signal(getattr(signal, name), terminate)

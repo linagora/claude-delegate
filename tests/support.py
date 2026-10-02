@@ -30,7 +30,7 @@ SAMPLE_FINDING = {
 }
 
 _FAKE_SCRIPT = '''#!{python}
-import json, os, sys
+import json, os, sys, time
 from pathlib import Path
 
 here = Path({directory!r})
@@ -57,6 +57,7 @@ with open(here / "calls.jsonl", "a", encoding="utf-8") as f:
 queue = json.loads((here / "reply.json").read_text(encoding="utf-8"))["queue"]
 reply = queue.pop(0) if len(queue) > 1 else queue[0]
 (here / "reply.json").write_text(json.dumps({{"queue": queue}}), encoding="utf-8")
+time.sleep(reply.get("sleep", 0))
 for name in reply.get("touch", []):
     Path(name).parent.mkdir(parents=True, exist_ok=True)
     Path(name).touch()
@@ -116,13 +117,17 @@ class FakeClaude:
         else:
             version.write_text(text, encoding="utf-8")
 
-    def reply(self, payload: Dict[str, Any], exit_code: int = 0, touch: Sequence[str] = ()) -> None:
+    def reply(
+        self, payload: Dict[str, Any], exit_code: int = 0, touch: Sequence[str] = (), sleep: float = 0
+    ) -> None:
         """Answer with `payload`; `touch` files (relative to the cwd) are created
-        first, as a reviewer that managed to write would."""
-        self.reply_raw(json.dumps(payload), exit_code, touch)
+        first, as a reviewer that managed to write would, after `sleep` seconds."""
+        self.reply_raw(json.dumps(payload), exit_code, touch, sleep)
 
-    def reply_raw(self, stdout: str, exit_code: int = 0, touch: Sequence[str] = ()) -> None:
-        self._queue([{"stdout": stdout, "exit_code": exit_code, "touch": list(touch)}])
+    def reply_raw(
+        self, stdout: str, exit_code: int = 0, touch: Sequence[str] = (), sleep: float = 0
+    ) -> None:
+        self._queue([{"stdout": stdout, "exit_code": exit_code, "touch": list(touch), "sleep": sleep}])
 
     def replies(self, *payloads: Dict[str, Any]) -> None:
         """Answer successive calls with successive payloads; the last one then repeats."""
