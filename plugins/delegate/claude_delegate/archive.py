@@ -30,8 +30,9 @@ def repo_key(root: Path, origin_url: Optional[str]) -> str:
     return f"{_safe(root.name)}-{digest}"
 
 
-def new_id(kind: str, created_at: datetime) -> str:
-    return f"{created_at:%Y%m%dT%H%M%SZ}-{kind}-{secrets.token_hex(3)}"
+def new_id(slug: str, created_at: datetime) -> str:
+    """Such as 20261002T120000Z-pr-7-a1b2c3: sortable, with what was reviewed."""
+    return f"{created_at:%Y%m%dT%H%M%SZ}-{slug}-{secrets.token_hex(3)}"
 
 
 def save(directory: Path, report_id: str, markdown: str, companion: Dict[str, Any]) -> Path:

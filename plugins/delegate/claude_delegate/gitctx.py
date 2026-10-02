@@ -185,9 +185,9 @@ def _repository(cwd: Path) -> Path:
     return Path(toplevel)
 
 
-def _reviewable_diff(root: Path, start: str, end: str, unchanged: str) -> str:
+def _reviewable_diff(root: Path, start: str, end: str, empty_reason: str) -> str:
     """The diff from `start` to `end` that the reviewer receives, without denied
-    files; `unchanged` says why there is nothing to review when it is empty."""
+    files; `empty_reason` says why there is nothing to review when it is empty."""
     diff = git(root, "diff", "--no-color", "--no-ext-diff", start, end, "--", ".", *_DENIED, strip=False)
     if not diff.strip():
         unreviewed = _unreviewed_changes(root, start, end)
@@ -197,7 +197,7 @@ def _reviewable_diff(root: Path, start: str, end: str, unchanged: str) -> str:
                 "relis-les toi-même",
                 EXIT_PREPARATION,
             )
-        raise DelegateError(f"rien à relire : {unchanged}", EXIT_PREPARATION)
+        raise DelegateError(f"rien à relire : {empty_reason}", EXIT_PREPARATION)
     if len(diff) > MAX_DIFF_CHARS:
         size, limit = (f"{n:,}".replace(",", " ") for n in (len(diff), MAX_DIFF_CHARS))
         raise DelegateError(

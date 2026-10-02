@@ -92,7 +92,7 @@ def _pr_review(number: int, model: str) -> int:
 def _publish(repo: str, subject: report.Subject, execution: delegate.Execution, review: interpret.Review) -> int:
     """Archive the report, then print its path and its Markdown for the session."""
     created_at = datetime.now(timezone.utc)
-    reviewed = report.Report(
+    review_report = report.Report(
         id=archive.new_id(subject.slug, created_at),
         created_at=created_at,
         repo=repo,
@@ -100,9 +100,9 @@ def _publish(repo: str, subject: report.Subject, execution: delegate.Execution, 
         execution=execution,
         review=review,
     )
-    markdown = reviewed.markdown()
+    markdown = review_report.markdown()
     try:
-        path = archive.save(archive.state_dir() / repo, reviewed.id, markdown, reviewed.companion())
+        path = archive.save(archive.state_dir() / repo, review_report.id, markdown, review_report.companion())
     except OSError as error:
         raise DelegateError(f"impossible d'archiver le rapport : {error}") from None
     sys.stdout.write(f"Rapport : {path}\n\n{markdown}")
