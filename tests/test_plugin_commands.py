@@ -33,8 +33,14 @@ def shell_invocations(body: str) -> List[str]:
     return re.findall(r"!`([^`]+)`", body)
 
 
-def bash_prefixes(allowed_tools: str) -> List[str]:
-    return [rule[: -len(":*")] for rule in re.findall(r"Bash\(([^)]*)\)", allowed_tools) if rule.endswith(":*")]
+def tool_rules(allowed_tools: str) -> List[str]:
+    """`Bash(x:*), Write` -> ["Bash(x:*)", "Write"]."""
+    return re.findall(r"[A-Za-z]+(?:\([^)]*\))?", allowed_tools)
+
+
+def rule_for(invocation: str) -> str:
+    """The narrowest rule allowing an invocation, whatever arguments the user types."""
+    return f"Bash({invocation.removesuffix(' $ARGUMENTS')}:*)"
 
 
 class PluginCommandsTest(unittest.TestCase):
@@ -49,19 +55,17 @@ class PluginCommandsTest(unittest.TestCase):
         self.assertEqual(manifest["name"], "delegate")
         self.assertEqual(manifest["version"], version)
 
-    def test_commands_are_human_only_and_allowed_to_run_their_invocation(self) -> None:
+    def test_commands_are_human_only_and_allowed_exactly_their_invocations(self) -> None:
         commands = sorted((PLUGIN / "commands").glob("*.md"))
         self.assertTrue(commands)
         for command in commands:
             with self.subTest(command.name):
                 fields, body = parse_command(command)
                 self.assertEqual(fields.get("disable-model-invocation"), "true")
-                prefixes = bash_prefixes(fields.get("allowed-tools", ""))
-                for invocation in shell_invocations(body):
-                    self.assertTrue(
-                        any(invocation.startswith(prefix) for prefix in prefixes),
-                        f"{invocation!r} n'est couvert par aucun de {prefixes}",
-                    )
+                self.assertEqual(
+                    sorted(tool_rules(fields.get("allowed-tools", ""))),
+                    sorted(rule_for(invocation) for invocation in shell_invocations(body)),
+                )
 
     def test_invocations_target_the_executable_cli_and_one_of_its_subcommands(self) -> None:
         for command in sorted((PLUGIN / "commands").glob("*.md")):
