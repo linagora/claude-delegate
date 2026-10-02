@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import os
-import posixpath
-import re
 import shutil
 import subprocess
 import tempfile
@@ -12,15 +10,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
-from . import policy
+from . import conventions, policy
 from .errors import EXIT_PREPARATION, DelegateError
 
 #: Denied files stay out of the diff too, since the reviewer may not read them.
 _DENIED = [f":(exclude,glob){path}" for path in policy.DENIED_PATHS]
-
-#: A CLAUDE.md line made only of `@path` imports that file, as in Claude Code.
-_IMPORT = re.compile(r"^@(\S+)\s*$")
-_MAX_IMPORT_DEPTH = 5
 
 #: Beyond this (about 250k tokens), a review costs too much to be useful.
 MAX_DIFF_CHARS = 1_000_000
@@ -83,9 +77,8 @@ def hostile_context(cwd: Path, base: Optional[str]) -> HostileContext:
 
 
 def trusted_conventions(root: Path, revision: str) -> Optional[str]:
-    """The root CLAUDE.md as it is at `revision`, its `@path` imports resolved
-    from the same revision, so the reviewed work cannot change them."""
-    return _with_imports(root, revision, "CLAUDE.md", seen=())
+    """The conventions as they are at `revision`, so the reviewed work cannot change them."""
+    return conventions.trusted(lambda path: _show(root, revision, path))
 
 
 def default_base(root: Path) -> str:
@@ -127,28 +120,9 @@ def _freeze_working_tree(root: Path) -> str:
         return git(root, "commit-tree", tree, "-p", "HEAD", "-m", "claude-delegate : révision relue", env=env)
 
 
-def _with_imports(root: Path, revision: str, path: str, seen: Tuple[str, ...]) -> Optional[str]:
-    if path in seen or len(seen) > _MAX_IMPORT_DEPTH:
-        return None
+def _show(root: Path, revision: str, path: str) -> Optional[str]:
     done = _run(root, ("show", f"{revision}:{path}"))
-    if done.returncode != 0:
-        return None
-    lines = []
-    for line in done.stdout.splitlines():
-        match = _IMPORT.match(line)
-        target = _imported_path(path, match.group(1)) if match else None
-        imported = _with_imports(root, revision, target, seen + (path,)) if target else None
-        lines.append(line if imported is None else imported)
-    return "\n".join(lines)
-
-
-def _imported_path(importer: str, reference: str) -> Optional[str]:
-    """A path inside the repository, relative to the importing file. Home and
-    absolute paths are never followed: they are not part of the revision."""
-    if reference.startswith(("~", "/")):
-        return None
-    path = posixpath.normpath(posixpath.join(posixpath.dirname(importer), reference))
-    return None if path.startswith("..") else path
+    return done.stdout if done.returncode == 0 else None
 
 
 def _git_or_none(cwd: Path, *args: str) -> Optional[str]:

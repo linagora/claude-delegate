@@ -15,7 +15,7 @@ CONVENTIONS_HEADING = "## Conventions du projet (version de confiance)"
 def hostile_review(conventions: Optional[str]) -> str:
     """The hostile review task, followed by the project's trusted conventions if any."""
     task = (PROMPTS / "hostile-review.md").read_text(encoding="utf-8").rstrip()
-    if not conventions or not conventions.strip():
+    if not conventions:
         return task + "\n"
     return (
         f"{task}\n\n{CONVENTIONS_HEADING}\n\n"
