@@ -90,6 +90,7 @@ class PluginCommandsTest(unittest.TestCase):
             [f"{PLUGIN_ROOT_VAR}/bin/claude-delegate pr-review $ARGUMENTS"],
         )
         self.assertIn("git show", body)
+        self.assertIn("aucun checkout", body)
         self.assertIn("« Tête »", body)
         self.assertIn("« Fichiers non relus »", body)
         self.assertIn("Ne publie rien", body)

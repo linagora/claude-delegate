@@ -6,7 +6,8 @@ import shlex
 import shutil
 import signal
 import unittest
-from typing import Any, Dict
+from pathlib import Path
+from typing import Any, Dict, List
 
 from tests.support import (
     PLUGIN,
@@ -47,19 +48,35 @@ class PullRequestReviewTest(PullRequestTestCase):
     def worktrees(self) -> int:
         return self.sb.git("worktree", "list", "--porcelain").count("worktree ")
 
+    def user_state(self) -> List[str]:
+        """Everything a review must leave as it is: branch, commit, index, working tree."""
+        return [
+            self.sb.git("branch", "--show-current"),
+            self.sb.git("rev-parse", "HEAD"),
+            self.sb.git("status", "--porcelain", "--untracked-files=all"),
+            self.sb.git("diff", "--cached"),
+            self.sb.git("diff"),
+        ]
+
     def test_the_reviewer_reads_the_pull_request_in_a_throwaway_worktree(self) -> None:
-        status, head = self.sb.git("status", "--porcelain"), self.sb.git("rev-parse", "HEAD")
+        self.sb.git("switch", "-q", "-c", "travail")
+        self.sb.write("app.py", "def div(a, b):\n    return a // b\n")
+        self.sb.write("indexe.py", "STAGED = 1\n")
+        self.sb.git("add", "indexe.py")
+        self.sb.write("brouillon.py", "UNTRACKED = 1\n")
+        before = self.user_state()
 
         result = self.run_pr()
 
         self.assertEqual(result.returncode, 0, result.stderr)
         call = self.sb.fake.last_call()
-        self.assertNotEqual(call["cwd"], str(self.sb.repo))
+        tree = Path(call["cwd"])
+        self.assertFalse(tree.is_relative_to(self.sb.repo), tree)
         self.assertIn("PR_CHANGE", call["cwd_files"]["app.py"])
-        self.assertFalse(os.path.exists(call["cwd"]))
+        self.assertNotIn("brouillon.py", call["cwd_files"])
+        self.assertFalse(tree.exists())
         self.assertEqual(self.worktrees(), 1)
-        self.assertEqual(self.sb.git("status", "--porcelain"), status)
-        self.assertEqual(self.sb.git("rev-parse", "HEAD"), head)
+        self.assertEqual(self.user_state(), before)
 
     def test_the_pull_request_and_its_diff_since_the_target_branch_reach_the_reviewer(self) -> None:
         self.sb.write("later.py", "LATER_ON_MAIN = 1\n")
@@ -78,9 +95,10 @@ class PullRequestReviewTest(PullRequestTestCase):
         ]:
             self.assertIn(text, stdin)
         self.assertNotIn("LATER_ON_MAIN", stdin)
-        self.assertIn(
-            ["pr", "view", "7", "--repo", "github.com/acme/app", "--json", "title,body,baseRefName,headRefOid,url"],
+        # A single read: nothing is published on GitHub.
+        self.assertEqual(
             self.gh.calls(),
+            [["pr", "view", "7", "--repo", "github.com/acme/app", "--json", "title,body,baseRefName,headRefOid,url"]],
         )
 
     def test_the_review_moves_no_ref_of_the_repository(self) -> None:
@@ -174,10 +192,13 @@ class PullRequestReviewTest(PullRequestTestCase):
 
         self.run_pr()
 
-        prompt = self.sb.fake.last_call()["system_prompt"] or ""
+        call = self.sb.fake.last_call()
+        prompt = call["system_prompt"] or ""
         self.assertIn((PLUGIN / "prompts" / "pr-review.md").read_text(encoding="utf-8").strip(), prompt)
         self.assertIn("CONVENTION_CIBLE", prompt)
         self.assertNotIn("CONVENTION_DE_LA_PR", prompt)
+        # The pull request's change to CLAUDE.md is reviewed as code.
+        self.assertIn("+CONVENTION_DE_LA_PR", call["stdin"])
 
     def test_unreadable_conventions_of_the_target_branch_stop_the_review(self) -> None:
         self.sb.write("CLAUDE.md", "CONVENTION_CIBLE\n")
@@ -201,7 +222,9 @@ class PullRequestReviewTest(PullRequestTestCase):
         self.assertIn("| Pull request | #7 https://github.com/acme/app/pull/7 |", result.stdout)
         self.assertIn("| Branche cible | main |", result.stdout)
         self.assertIn(f"| Tête | {self.head} |", result.stdout)
-        companion = json.loads(report_path(result.stdout).with_suffix(".json").read_text(encoding="utf-8"))
+        report = report_path(result.stdout)
+        self.assertRegex(report.name, r"^\d{8}T\d{6}Z-pr-7-[0-9a-f]{6}\.md$")
+        companion = json.loads(report.with_suffix(".json").read_text(encoding="utf-8"))
         self.assertEqual(
             (companion["type"], companion["head"], companion["verdict"]), ("pr", self.head, "REQUEST_CHANGES")
         )
