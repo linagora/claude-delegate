@@ -27,10 +27,12 @@ def selftest() -> str:
 
 
 def _review_prompt(task_file: str, conventions: Optional[str]) -> str:
-    """A review task, in which every review shares the format of its findings,
-    followed by the project's trusted conventions if any."""
-    findings = (PROMPTS / "findings.md").read_text(encoding="utf-8").rstrip()
-    task = (PROMPTS / task_file).read_text(encoding="utf-8").replace("{findings}", findings).rstrip()
+    """A review task, in which reviews share fragments such as the format of
+    their findings, followed by the project's trusted conventions if any."""
+    task = (PROMPTS / task_file).read_text(encoding="utf-8")
+    for fragment in ("findings", "security"):
+        task = task.replace(f"{{{fragment}}}", (PROMPTS / f"{fragment}.md").read_text(encoding="utf-8").rstrip())
+    task = task.rstrip()
     if not conventions:
         return task + "\n"
     # replace, not format: the conventions may contain braces.
