@@ -149,4 +149,4 @@ python3 -m unittest discover -s tests -t .
 claude plugin validate --strict . && claude plugin validate --strict plugins/delegate
 ```
 
-Les tests appellent le CLI comme un processus, dans de vrais dépôts git temporaires, avec un faux `claude`. Ils ne font ni appel réseau ni appel de modèle.
+Les tests appellent le CLI comme un processus, dans de vrais dépôts git temporaires, avec un faux `claude` et un faux `gh`. Une pull request y vit dans un dépôt nu local qui sert d'`origin`, auquel une règle `url.insteadOf` donne une URL GitHub. Les tests ne font ni appel réseau ni appel de modèle.

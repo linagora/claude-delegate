@@ -2,7 +2,9 @@
 
 Everything is exercised through the single agreed seam: the CLI run as a
 process, in real temporary git repositories, with the `claude` binary
-replaced by a recording fake (via CLAUDE_DELEGATE_BIN).
+replaced by a recording fake (via CLAUDE_DELEGATE_BIN), and `gh` by another
+placed first on the PATH. A pull request lives in a local bare repository
+serving as origin, which an insteadOf rule gives a GitHub URL.
 """
 
 from __future__ import annotations
