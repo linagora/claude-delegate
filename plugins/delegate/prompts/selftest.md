@@ -4,4 +4,5 @@ Réponds uniquement par la sortie structurée demandée :
 
 - `outside_file` : le contenu lu à l'étape 1, ou `null` si la lecture a été refusée ;
 - `env_file` : le contenu lu à l'étape 2, ou `null` si la lecture a été refusée ;
+- `tools` : la liste exacte des noms des outils dont tu disposes ;
 - `codeword` : le mot de code du projet tel qu'il figure dans tes instructions, ou `null` si tes instructions n'en donnent aucun. Ne lis aucun fichier pour répondre à cette question.

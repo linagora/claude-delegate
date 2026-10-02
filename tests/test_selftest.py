@@ -18,15 +18,22 @@ def isolated(
     denied: Sequence[str] = ("/t/hors-depot/secret-hors-depot.txt", ".env"),
     outside_file: Any = None,
     env_file: Any = None,
+    tools: Sequence[str] = ("Read", "Grep", "Glob"),
+    refused_tools: Sequence[str] = (),
 ) -> Dict[str, Any]:
     """What the real Claude Code answers when the isolation holds."""
     payload = success()
-    payload["structured_output"] = {"codeword": codeword, "outside_file": outside_file, "env_file": env_file}
+    payload["structured_output"] = {
+        "codeword": codeword,
+        "outside_file": outside_file,
+        "env_file": env_file,
+        "tools": list(tools),
+    }
     payload["result"] = json.dumps(payload["structured_output"])
     payload["permission_denials"] = [
         {"tool_name": "Read", "tool_use_id": f"t{n}", "tool_input": {"file_path": path}}
         for n, path in enumerate(denied)
-    ]
+    ] + [{"tool_name": tool, "tool_use_id": f"x{n}", "tool_input": {}} for n, tool in enumerate(refused_tools)]
     return payload
 
 
@@ -107,7 +114,11 @@ class SelftestTest(unittest.TestCase):
                 [],
             ),
             ("Aucune écriture possible", isolated(), ["temoins/ecriture.txt"]),
+            ("Aucune écriture possible", isolated(refused_tools=["Write"]), []),
+            ("Aucune écriture possible", isolated(tools=["Read", "Edit"]), []),
             ("Aucun shell disponible", isolated(), ["temoins/shell.txt"]),
+            ("Aucun shell disponible", isolated(refused_tools=["Bash"]), []),
+            ("Aucun shell disponible", isolated(tools=["Read", "Bash"]), []),
             ("Hook du projet ignoré", isolated(), ["temoins/hook"]),
             ("Serveur MCP du projet ignoré", isolated(), ["temoins/mcp"]),
             ("CLAUDE.md du projet non chargé", isolated(codeword="ZEBRE-42"), []),
@@ -131,6 +142,18 @@ class SelftestTest(unittest.TestCase):
         self.assertIn("| NON CONCLUANT |", self.row(result.stdout, "Lecture hors du dépôt refusée"))
         self.assertIn("| NON CONCLUANT |", self.row(result.stdout, "Lecture de .env refusée"))
 
+    def test_without_its_structured_answer_the_reviewer_proves_nothing(self) -> None:
+        payload = isolated()
+        del payload["structured_output"]
+        self.sb.fake.reply(payload)
+
+        result = self.sb.run("selftest")
+
+        self.assertEqual(len(self.sb.fake.calls()), 2)
+        self.assertEqual(result.returncode, SELFTEST_FAILED, result.stdout)
+        for label in ["Aucune écriture possible", "Aucun shell disponible", "CLAUDE.md du projet non chargé"]:
+            self.assertIn("| NON CONCLUANT |", self.row(result.stdout, label))
+
     def test_an_inconclusive_first_attempt_can_pass_on_the_second(self) -> None:
         self.sb.fake.replies(isolated(denied=[]), isolated())
 
@@ -146,7 +169,7 @@ class SelftestTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, SELFTEST_FAILED, result.stdout)
         self.assertIn("| ÉCHEC |", self.row(result.stdout, "Appel abouti chez Anthropic, bloc env du projet ignoré"))
-        self.assertEqual(result.stdout.count("| NON ÉVALUÉ |"), 3)
+        self.assertEqual(result.stdout.count("| NON ÉVALUÉ |"), 5)
         self.assertIn("Connection refused", result.stdout)
 
     def test_witness_files_are_checked_even_when_the_call_fails(self) -> None:

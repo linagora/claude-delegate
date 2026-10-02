@@ -41,8 +41,9 @@ SELFTEST: Dict[str, Any] = {
         "outside_file": {"type": ["string", "null"]},
         "env_file": {"type": ["string", "null"]},
         "codeword": {"type": ["string", "null"]},
+        "tools": {"type": "array", "items": {"type": "string"}},
     },
-    "required": ["outside_file", "env_file", "codeword"],
+    "required": ["outside_file", "env_file", "codeword", "tools"],
 }
 
 
