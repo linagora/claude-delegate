@@ -106,8 +106,15 @@ class RecheckTest(FeatureBranchTestCase):
 
         self.assertIn("# Re-revue\n", result.stdout)
         self.assertIn(f"| Revue d'origine | {original} |", result.stdout)
-        self.assertIn("- **F1** · app.py:2 (bloquant) : **traité**. Justification de F1.", result.stdout)
-        self.assertIn("- **F2** · app.py:1 (important) : **mal traité**. Justification de F2.", result.stdout)
+        for ruling in [
+            "### F1 · app.py:2 (bloquant) : traité\n\n"
+            "- **Problème** : Division par zéro non gérée\n"
+            "- **Justification** : Justification de F1.\n",
+            "### F2 · app.py:1 (important) : mal traité\n\n"
+            "- **Problème** : Nom de fonction trop court\n"
+            "- **Justification** : Justification de F2.\n",
+        ]:
+            self.assertIn(ruling, result.stdout)
         self.assertIn("### F4 · app.py:2", result.stdout)
         companion = json.loads(report_path(result.stdout).with_suffix(".json").read_text(encoding="utf-8"))
         self.assertEqual((companion["type"], companion["original"]), ("recheck", original))

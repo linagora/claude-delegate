@@ -204,12 +204,18 @@ def _render(title: str, header: List[Tuple[str, str]], review: Review) -> str:
 
 
 def _statuses(statuses: List[Status]) -> List[str]:
-    lines = [
-        f"- **{s.finding.id}** · {s.finding.location} ({s.finding.severity}) : "
-        f"**{s.status}**. {s.justification.strip()}"
-        for s in statuses
-    ]
-    return (lines or ["Aucun constat bloquant ou important à vérifier."]) + [""]
+    """Each ruling, with what the original finding was, so that it can be checked."""
+    lines: List[str] = []
+    for status in statuses:
+        finding = status.finding
+        lines += [
+            f"### {finding.id} · {finding.location} ({finding.severity}) : {status.status}",
+            "",
+            f"- **Problème** : {finding.problem}",
+            f"- **Justification** : {status.justification.strip()}",
+            "",
+        ]
+    return lines or ["Aucun constat bloquant ou important à vérifier.", ""]
 
 
 def _status_record(status: Status) -> Dict[str, str]:
