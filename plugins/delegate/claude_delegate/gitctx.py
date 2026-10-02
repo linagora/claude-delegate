@@ -6,11 +6,12 @@ import os
 import shutil
 import subprocess
 import tempfile
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Iterator, Optional, Tuple
 
-from . import conventions, policy
+from . import conventions, forge, policy
 from .errors import EXIT_PREPARATION, DelegateError
 
 #: Denied files stay out of the diff too, since the reviewer may not read them.
@@ -18,6 +19,10 @@ _DENIED = [f":(exclude,glob){path}" for path in policy.DENIED_PATHS]
 
 #: Beyond this (about 250k tokens), a review costs too much to be useful.
 MAX_DIFF_CHARS = 1_000_000
+
+#: What a pull request could bring to steer its reviewer: instructions,
+#: settings, hooks, MCP servers. Matched whatever the case, as macOS does.
+_REVIEWER_CONFIGURATION = {"claude.md", "claude.local.md", ".claude", ".mcp.json"}
 
 #: Identity of the technical commit that freezes the reviewed revision, so that
 #: building it never depends on the user's git configuration.
@@ -41,6 +46,35 @@ class HostileContext:
     conventions: Optional[str]
 
 
+@dataclass(frozen=True)
+class PullRequestContext:
+    root: Path
+    origin_url: Optional[str]
+    pull_request: forge.PullRequest
+    #: The tip of the target branch, fetched for the review.
+    base_revision: str
+    merge_base: str
+    diff: str
+    #: The root CLAUDE.md of the target branch, never from the pull request.
+    conventions: Optional[str]
+
+    def reviewer_input(self) -> str:
+        """The pull request as its author presents it, then its diff."""
+        pr = self.pull_request
+        return (
+            f"Pull request #{pr.number} : {pr.title}\n"
+            f"URL : {pr.url}\n"
+            f"Branche cible : {pr.base}\n"
+            f"Tête : {pr.head}\n"
+            "\n--- Début de la description de la pull request ---\n"
+            f"{pr.body.strip() or '(aucune description)'}\n"
+            "--- Fin de la description de la pull request ---\n"
+            f"\n--- Début du diff, du merge-base avec {pr.base} jusqu'à la tête ---\n"
+            f"{self.diff}"
+            "--- Fin du diff ---\n"
+        )
+
+
 def hostile_context(cwd: Path, base: Optional[str]) -> HostileContext:
     root = _repository(cwd)
     if _git_or_none(root, "rev-parse", "--verify", "--quiet", "HEAD^{commit}") is None:
@@ -62,6 +96,50 @@ def hostile_context(cwd: Path, base: Optional[str]) -> HostileContext:
         diff=_reviewable_diff(root, merge_base, reviewed_revision, f"aucun changement depuis {base}"),
         conventions=conventions_text,
     )
+
+
+def pull_request_context(cwd: Path, number: int) -> PullRequestContext:
+    root = _repository(cwd)
+    origin = origin_url(root)
+    pr = forge.pull_request(origin, number)
+    tracking = f"refs/remotes/origin/{pr.base}"
+    base_revision = _fetch(root, f"+refs/heads/{pr.base}:{tracking}", tracking)
+    head = _fetch(root, pr.ref, "FETCH_HEAD")
+    if head != pr.head:
+        raise DelegateError(
+            f"la pull request #{number} a changé pendant la préparation (tête {pr.head[:12]} selon la forge, "
+            f"{head[:12]} récupérée) : relance la revue",
+            EXIT_PREPARATION,
+        )
+    merge_base = _git_or_none(root, "merge-base", base_revision, head)
+    if merge_base is None:
+        raise DelegateError(f"aucun ancêtre commun entre {pr.base} et la pull request #{number}", EXIT_PREPARATION)
+    return PullRequestContext(
+        root=root,
+        origin_url=origin,
+        pull_request=pr,
+        base_revision=base_revision,
+        merge_base=merge_base,
+        diff=_reviewable_diff(root, merge_base, head, f"la pull request #{number} ne change rien à {pr.base}"),
+        conventions=trusted_conventions(root, base_revision),
+    )
+
+
+@contextmanager
+def pull_request_worktree(root: Path, head: str) -> Iterator[Path]:
+    """`head` checked out in a detached, throwaway worktree outside the
+    repository, stripped of the configuration the pull request brings. The
+    worktree is removed whatever happens, interruptions included."""
+    with tempfile.TemporaryDirectory(prefix="claude-delegate-pr-") as tmp:
+        tree = Path(tmp).resolve() / "pull-request"
+        try:
+            # No hooks: a post-checkout hook runs inside the new worktree, where
+            # it could run the pull request's own code (npm install, lefthook…).
+            git(root, "-c", "core.hooksPath=/dev/null", "worktree", "add", "--detach", str(tree), head)
+            _strip_reviewer_configuration(tree)
+            yield tree
+        finally:
+            _run(root, ("worktree", "remove", "--force", str(tree)))
 
 
 def trusted_conventions(root: Path, revision: str) -> Optional[str]:
@@ -109,6 +187,25 @@ def _reviewable_diff(root: Path, start: str, end: str, unchanged: str) -> str:
             f"diff trop volumineux pour une revue : {size} caractères (maximum {limit})", EXIT_PREPARATION
         )
     return diff
+
+
+def _fetch(root: Path, refspec: str, fetched: str) -> str:
+    """Fetch `refspec` from origin; returns the commit `fetched` then names."""
+    no_prompt = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+    git(root, "fetch", "--quiet", "--no-tags", "--no-recurse-submodules", "origin", refspec, env=no_prompt)
+    return git(root, "rev-parse", "--verify", f"{fetched}^{{commit}}")
+
+
+def _strip_reviewer_configuration(tree: Path) -> None:
+    for directory, subdirectories, files in os.walk(tree):
+        for name in subdirectories + files:
+            if name.lower() in _REVIEWER_CONFIGURATION:
+                path = Path(directory, name)
+                if path.is_dir() and not path.is_symlink():
+                    shutil.rmtree(path)
+                else:
+                    path.unlink()
+        subdirectories[:] = [name for name in subdirectories if name.lower() not in _REVIEWER_CONFIGURATION]
 
 
 def _freeze_working_tree(root: Path) -> str:

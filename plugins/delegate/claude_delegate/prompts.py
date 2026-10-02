@@ -14,6 +14,10 @@ def hostile_review(conventions: Optional[str]) -> str:
     return _with_conventions("hostile-review.md", conventions)
 
 
+def pr_review(conventions: Optional[str]) -> str:
+    return _with_conventions("pr-review.md", conventions)
+
+
 def selftest() -> str:
     return (PROMPTS / "selftest.md").read_text(encoding="utf-8")
 

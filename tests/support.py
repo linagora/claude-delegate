@@ -242,3 +242,99 @@ class FeatureBranchTestCase(unittest.TestCase):
         self.sb.git("switch", "-q", "-c", "feature")
         self.sb.write("app.py", "def div(a, b):\n    return a / b if b else 0\n")
         self.sb.commit_all("feature change")
+
+
+_FAKE_FORGE_SCRIPT = '''#!{python}
+import json, sys
+from pathlib import Path
+
+here = Path({directory!r})
+with open(here / "calls.jsonl", "a", encoding="utf-8") as f:
+    f.write(json.dumps(sys.argv[1:]) + "\\n")
+reply = json.loads((here / "reply.json").read_text(encoding="utf-8"))
+sys.stdout.write(reply["stdout"])
+sys.stderr.write(reply["stderr"])
+sys.exit(reply["exit_code"])
+'''
+
+
+class FakeForgeCli:
+    """Stand-in for `gh` or `glab`, placed first on the PATH."""
+
+    def __init__(self, directory: Path, name: str) -> None:
+        directory.mkdir(parents=True)
+        self.directory = directory
+        path = directory / name
+        path.write_text(_FAKE_FORGE_SCRIPT.format(python=sys.executable, directory=str(directory)), encoding="utf-8")
+        path.chmod(0o755)
+        self.reply({})
+
+    def reply(self, payload: Dict[str, Any]) -> None:
+        self._write(json.dumps(payload), "", 0)
+
+    def fail(self, stderr: str) -> None:
+        self._write("", stderr, 1)
+
+    def _write(self, stdout: str, stderr: str, exit_code: int) -> None:
+        reply = {"stdout": stdout, "stderr": stderr, "exit_code": exit_code}
+        (self.directory / "reply.json").write_text(json.dumps(reply), encoding="utf-8")
+
+    def calls(self) -> List[List[str]]:
+        log = self.directory / "calls.jsonl"
+        if not log.exists():
+            return []
+        return [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+
+
+class PullRequestTestCase(unittest.TestCase):
+    """A repository whose origin looks like GitHub, holding pull request #7 from a contributor."""
+
+    NUMBER = "7"
+    URL = "https://github.com/acme/app.git"
+
+    def setUp(self) -> None:
+        self.sb = Sandbox()
+        self.addCleanup(self.sb.cleanup)
+        self.sb.init_repo()
+        self.origin = self.sb.root / "origin.git"
+        self.sb.git("init", "-q", "--bare", "-b", "main", str(self.origin), cwd=self.sb.root)
+        self.sb.git("config", f"url.{self.origin}.insteadOf", self.URL)
+        self.sb.git("remote", "add", "origin", self.URL)
+        self.sb.git("push", "-q", "origin", "main")
+        self.contributor = self.sb.root / "contributor"
+        self.sb.git("clone", "-q", str(self.origin), str(self.contributor), cwd=self.sb.root)
+        self.head = self.push_pull_request({"app.py": "def div(a, b):\n    return a / b if b else PR_CHANGE\n"})
+        self.gh = FakeForgeCli(self.sb.root / "forge-bin", "gh")
+        self.gh.reply(self.metadata())
+
+    def push_pull_request(self, files: Dict[str, str]) -> str:
+        """Commit `files` on top of origin's main in the contributor's clone and
+        publish them as refs/pull/7/head only, as from a fork: the repository
+        under review only gets them by fetching. Returns the PR head."""
+        clone = self.contributor
+        self.sb.git("fetch", "-q", "origin", cwd=clone)
+        self.sb.git("switch", "-q", "--detach", "origin/main", cwd=clone)
+        for name, content in files.items():
+            path = clone / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+        self.sb.git("add", "-A", cwd=clone)
+        self.sb.git("commit", "-q", "-m", "pull request work", cwd=clone)
+        self.sb.git("push", "-q", "-f", "origin", f"HEAD:refs/pull/{self.NUMBER}/head", cwd=clone)
+        return self.sb.git("rev-parse", "HEAD", cwd=clone)
+
+    def metadata(self, **fields: Any) -> Dict[str, Any]:
+        return {
+            "title": "Gérer la division par zéro",
+            "body": "Cette PR renvoie PR_CHANGE quand b vaut zéro.",
+            "baseRefName": "main",
+            "headRefOid": self.head,
+            "url": f"https://github.com/acme/app/pull/{self.NUMBER}",
+            **fields,
+        }
+
+    def path_with_gh(self) -> str:
+        return f"{self.gh.directory}{os.pathsep}{os.environ['PATH']}"
+
+    def run_pr(self, *args: str) -> subprocess.CompletedProcess[str]:
+        return self.sb.run("pr-review", self.NUMBER, *args, extra_env={"PATH": self.path_with_gh()})
