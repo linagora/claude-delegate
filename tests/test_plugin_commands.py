@@ -83,12 +83,12 @@ class PluginCommandsTest(unittest.TestCase):
         )
 
 
-    def test_the_handoff_command_asks_for_a_self_contained_dated_brief(self) -> None:
-        fields, body = parse_command(PLUGIN / "commands" / "handoff.md")
+    def test_handoff_writes_a_dated_brief_without_shell_and_points_to_a_spec_session(self) -> None:
+        _, body = parse_command(PLUGIN / "commands" / "handoff.md")
 
         self.assertEqual(shell_invocations(body), [])
-        self.assertNotIn("allowed-tools", fields)
         self.assertIn("docs/specs/brief-AAAAMMJJ-", body)
+        self.assertIn("[a-z0-9-]", body)
         for section in [
             "## Contexte",
             "## Objectif",
@@ -98,7 +98,9 @@ class PluginCommandsTest(unittest.TestCase):
             "## Fichiers et références",
         ]:
             self.assertIn(section, body)
+        self.assertIn("session Claude Code sur Anthropic", body)
         self.assertLess(body.index("grill-me"), body.index("to-spec"))
+
 
 if __name__ == "__main__":
     unittest.main()
