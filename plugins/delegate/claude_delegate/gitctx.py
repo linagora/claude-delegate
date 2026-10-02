@@ -22,10 +22,6 @@ _ONLY_DENIED = [f":(glob){path}" for path in policy.DENIED_PATHS]
 #: Beyond this (about 250k tokens), a review costs too much to be useful.
 MAX_DIFF_CHARS = 1_000_000
 
-#: What a pull request could bring to steer its reviewer: instructions,
-#: settings, hooks, MCP servers. Matched whatever the case, as macOS does.
-_REVIEWER_CONFIGURATION = {"claude.md", "claude.local.md", ".claude", ".mcp.json"}
-
 #: Identity of the technical commit that freezes the reviewed revision, so that
 #: building it never depends on the user's git configuration.
 _TECHNICAL_IDENTITY = {
@@ -224,13 +220,13 @@ def _fetch(root: Path, ref: str) -> str:
 def _strip_reviewer_configuration(tree: Path) -> None:
     for directory, subdirectories, files in os.walk(tree):
         for name in subdirectories + files:
-            if name.lower() in _REVIEWER_CONFIGURATION:
+            if policy.configures_the_reviewer(name):
                 path = Path(directory, name)
                 if path.is_dir() and not path.is_symlink():
                     shutil.rmtree(path)
                 else:
                     path.unlink()
-        subdirectories[:] = [name for name in subdirectories if name.lower() not in _REVIEWER_CONFIGURATION]
+        subdirectories[:] = [name for name in subdirectories if not policy.configures_the_reviewer(name)]
 
 
 def _freeze_working_tree(root: Path) -> str:
