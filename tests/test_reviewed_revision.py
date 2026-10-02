@@ -4,9 +4,8 @@ import json
 import os
 import time
 import unittest
-from pathlib import Path
 
-from tests.support import FeatureBranchTestCase
+from tests.support import FeatureBranchTestCase, report_path
 
 PREPARATION_FAILURE = 3
 
@@ -53,9 +52,20 @@ class ReviewedRevisionTest(FeatureBranchTestCase):
         index = self.sb.repo / ".git" / "index"
         before = index.read_bytes()
 
-        self.sb.run("hostile-review", "main")
+        result = self.sb.run("hostile-review", "main")
 
+        self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(index.read_bytes(), before)
+
+    def test_a_repository_without_an_index_file_is_reviewed_from_head(self) -> None:
+        index = self.sb.repo / ".git" / "index"
+        index.unlink()
+
+        result = self.sb.run("hostile-review", "main")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("a / b if b else 0", self.sb.fake.last_call()["stdin"])
+        self.assertFalse(index.exists())
 
     def test_a_file_rewritten_right_after_staging_is_reviewed_as_rewritten(self) -> None:
         # Same size, same mtime, ctime ignored: only git's racy-entry check,
@@ -80,7 +90,7 @@ class ReviewedRevisionTest(FeatureBranchTestCase):
 
         result = self.sb.run("hostile-review", "main")
 
-        report = Path(result.stdout.partition("\n")[0][len("Rapport : ") :])
+        report = report_path(result.stdout)
         revision = json.loads(report.with_suffix(".json").read_text(encoding="utf-8"))["reviewed_revision"]
         self.assertIn(f"| Révision relue | {revision[:12]} |", result.stdout)
         self.assertEqual(self.sb.git("rev-parse", f"{revision}^"), head)
