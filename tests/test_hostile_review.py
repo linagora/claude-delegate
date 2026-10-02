@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import unittest
 from typing import List
 
@@ -255,6 +256,20 @@ class HostileReviewTest(FeatureBranchTestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("| Permissions refusées | Read /repo/.env |", result.stdout)
+
+    def test_permission_denials_stay_readable_in_the_header(self) -> None:
+        grep = {"tool_name": "Grep", "tool_input": {"pattern": "foo|bar\nbaz"}}
+        reads = [{"tool_name": "Read", "tool_input": {"file_path": f"/x/{n}"}} for n in range(15)]
+        self.sb.fake.reply({**success(), "permission_denials": [grep, grep, grep, *reads]})
+
+        result = self.sb.run("hostile-review", "main")
+
+        row = next(line for line in result.stdout.splitlines() if line.startswith("| Permissions refusées |"))
+        self.assertEqual(len(re.findall(r"(?<!\\)\|", row)), 3, row)
+        self.assertEqual(row.count("Grep"), 1)
+        self.assertIn("(+6 autres)", row)
+        companion = json.loads(report_path(result.stdout).with_suffix(".json").read_text(encoding="utf-8"))
+        self.assertEqual(len(companion["permission_denials"]), 16)
 
     def test_sonnet_can_be_requested_and_other_models_are_refused(self) -> None:
         self.sb.run("hostile-review", "main", "--model", "sonnet")

@@ -67,6 +67,11 @@ class HostileReport:
         ]
 
 
+def _cell(text: str) -> str:
+    """Keep a value inside its Markdown table cell."""
+    return " ".join(text.split()).replace("|", "\\|")
+
+
 def _short(digest: str) -> str:
     """Abbreviated commit id or hash, as shown in report headers."""
     return digest[:12]
@@ -76,10 +81,16 @@ def _unknown_if_none(value: Optional[int], unknown: str) -> str:
     return unknown if value is None else str(value)
 
 
+#: Beyond this, the header only counts the remaining denials (the companion keeps them all).
+_SHOWN_DENIALS = 10
+
+
 def _denials(denials: Optional[List[str]]) -> str:
     if denials is None:
         return "inconnues"
-    return "; ".join(denials) or "aucune"
+    shown = "; ".join(denials[:_SHOWN_DENIALS]) or "aucune"
+    hidden = len(denials) - _SHOWN_DENIALS
+    return f"{shown} (+{hidden} autres)" if hidden > 0 else shown
 
 
 def _money(usd: Optional[float]) -> str:
@@ -95,7 +106,7 @@ def _duration(seconds: Optional[float]) -> str:
 
 def _render(title: str, header: List[Tuple[str, str]], review: Review) -> str:
     lines = [f"# {title}", "", "| Champ | Valeur |", "|---|---|"]
-    lines += [f"| {label} | {value} |" for label, value in header]
+    lines += [f"| {_cell(label)} | {_cell(value)} |" for label, value in header]
     lines += ["", "## Résumé", "", review.summary.strip(), ""]
     for severity in SEVERITIES:
         lines += [f"## {severity.capitalize()}", ""]

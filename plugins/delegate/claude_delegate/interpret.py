@@ -80,7 +80,10 @@ def read_review(done: "subprocess.CompletedProcess[str]") -> Review:
         cost_usd=float(cost) if isinstance(cost, (int, float)) else None,
         duration_s=duration / 1000 if isinstance(duration, (int, float)) else None,
         permission_denials=(
-            [_denial(d) for d in denials if isinstance(d, dict)] if isinstance(denials, list) else None
+            # Deduplicated, in order: the reviewer often retries a refused call.
+            list(dict.fromkeys(_denial(d) for d in denials if isinstance(d, dict)))
+            if isinstance(denials, list)
+            else None
         ),
     )
 
