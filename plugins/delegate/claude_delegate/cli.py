@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
-from . import __version__, archive, delegate, gitctx, report
+from . import __version__, archive, delegate, gitctx, interpret, report, schemas
 from .errors import DelegateError
 
 
@@ -31,7 +31,14 @@ def main(argv: Optional[List[str]] = None) -> int:
 
 def _hostile_review(base: Optional[str]) -> int:
     ctx = gitctx.hostile_context(Path.cwd(), base)
-    review = delegate.review(ctx)
+    done = delegate.launch(
+        ctx.root,
+        ctx.diff,
+        schemas.HOSTILE_REVIEW,
+        delegate.PROMPTS / "hostile-review.md",
+        "Revue hostile du diff fourni sur l'entrée standard.",
+    )
+    review = interpret.read_review(done)
     created_at = archive.now()
     report_id = archive.new_id("hostile", created_at)
     repo = archive.repo_key(ctx.root, ctx.origin_url)

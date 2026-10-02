@@ -1,18 +1,14 @@
-"""The delegated Claude Code session: how it is launched and what it returns."""
+"""Launching the delegated Claude Code session, isolated and read-only."""
 
 from __future__ import annotations
 
 import json
 import os
 import subprocess
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List
 
-from . import schemas
 from .errors import DelegateError
-from .gitctx import HostileContext
-
 
 #: The plugin's prompts. ${CLAUDE_PLUGIN_ROOT} is not exported to the shell, so
 #: the CLI finds them from its own location.
@@ -32,27 +28,22 @@ MAX_TURNS = 30
 MAX_BUDGET_USD = 5
 
 
-@dataclass(frozen=True)
-class Review:
-    summary: str
-    findings: List[Dict[str, Any]]
-    model: str
-
-
-def review(ctx: HostileContext) -> Review:
+def launch(
+    root: Path, task_input: str, schema: Dict[str, Any], prompt_file: Path, instruction: str
+) -> "subprocess.CompletedProcess[str]":
+    """Run the reviewer in `root` on `task_input` and return its raw result."""
     binary = resolve_binary()
     try:
-        done = subprocess.run(
-            _command(binary, "Revue hostile du diff fourni sur l'entrée standard."),
-            input=ctx.diff,
-            cwd=ctx.root,
+        return subprocess.run(
+            _command(binary, schema, prompt_file, instruction),
+            input=task_input,
+            cwd=root,
             env=_environment(),
             capture_output=True,
             text=True,
         )
     except OSError as error:
         raise DelegateError(f"binaire claude introuvable ou non exécutable : {binary} ({error.strerror})") from None
-    return _interpret(done)
 
 
 def resolve_binary() -> str:
@@ -84,51 +75,6 @@ def _is_cmux_shim(path: Path) -> bool:
     return head.startswith(b"#!") and b"cmux" in head
 
 
-def _interpret(done: "subprocess.CompletedProcess[str]") -> Review:
-    try:
-        payload = json.loads(done.stdout)
-    except ValueError:
-        raise DelegateError(
-            f"sortie illisible du délégué (code {done.returncode}) : {_excerpt(done.stdout or done.stderr)}"
-        ) from None
-    if not isinstance(payload, dict):
-        raise DelegateError(f"sortie inattendue du délégué : {_excerpt(done.stdout)}")
-    if payload.get("is_error") or payload.get("subtype") != "success" or done.returncode != 0:
-        reason = payload.get("result") or payload.get("subtype") or f"code {done.returncode}"
-        raise DelegateError(f"la revue a échoué : {_excerpt(str(reason))}")
-    structured = payload.get("structured_output")
-    if not isinstance(structured, dict) or not schemas.is_review(structured):
-        raise DelegateError("la sortie structurée du délégué est absente ou non conforme au schéma")
-    return Review(
-        summary=structured["summary"],
-        findings=_numbered(structured["findings"]),
-        model=_model(payload),
-    )
-
-
-def _excerpt(text: str, limit: int = 300) -> str:
-    text = " ".join(text.split())
-    return text if len(text) <= limit else text[: limit - 1] + "…"
-
-
-def _model(payload: Dict[str, Any]) -> str:
-    """The model that actually answered: the costliest entry of modelUsage."""
-    usage = payload.get("modelUsage") or {}
-    if not usage:
-        return "inconnu"
-    return str(max(usage, key=lambda name: (usage[name] or {}).get("costUSD", 0)))
-
-
-def _numbered(findings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Most severe first (model order kept within a severity), numbered F1, F2…"""
-    ordered = sorted(findings, key=lambda f: schemas.SEVERITIES.index(f["severity"]))
-    fields = schemas.FINDING["required"]
-    return [
-        {"id": f"F{n}", **{field: finding[field] for field in fields}}
-        for n, finding in enumerate(ordered, start=1)
-    ]
-
-
 def _environment() -> Dict[str, str]:
     """Rebuilt from scratch, with a dedicated config dir holding the Anthropic login."""
     env = {k: v for k, v in os.environ.items() if k in PASSED_ENV or k.startswith("LC_")}
@@ -136,7 +82,7 @@ def _environment() -> Dict[str, str]:
     return env
 
 
-def _command(binary: str, prompt: str) -> List[str]:
+def _command(binary: str, schema: Dict[str, Any], prompt_file: Path, instruction: str) -> List[str]:
     """The isolation contract, validated against a booby-trapped project (probe V1).
 
     --restricted ignores user, project and local settings files (env blocks,
@@ -166,8 +112,8 @@ def _command(binary: str, prompt: str) -> List[str]:
         "--output-format",
         "json",
         "--json-schema",
-        json.dumps(schemas.HOSTILE_REVIEW),
+        json.dumps(schema),
         "--append-system-prompt-file",
-        str(PROMPTS / "hostile-review.md"),
-        prompt,
+        str(prompt_file),
+        instruction,
     ]

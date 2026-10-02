@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple
 
-from .delegate import Review
+from .interpret import Review
 
 SECTIONS = [("bloquant", "Bloquant"), ("important", "Important"), ("mineur", "Mineur")]
 
