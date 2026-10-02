@@ -1,4 +1,5 @@
-"""What the reviewer reads: the diff to review, prepared from git."""
+"""What the reviewer reads, prepared from git: the diff to review, the trusted
+conventions and, for a pull request, a throwaway worktree of its code."""
 
 from __future__ import annotations
 
