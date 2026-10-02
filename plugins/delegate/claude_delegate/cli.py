@@ -38,29 +38,16 @@ def _hostile_review(base: Optional[str]) -> int:
         delegate.PROMPTS / "hostile-review.md",
         "Revue hostile du diff fourni sur l'entrée standard.",
     )
-    review = interpret.read_review(done)
     created_at = archive.now()
-    report_id = archive.new_id("hostile", created_at)
-    repo = archive.repo_key(ctx.root, ctx.origin_url)
-    header = [
-        ("Identifiant", report_id),
-        ("Date (UTC)", f"{created_at:%Y-%m-%d %H:%M:%S}"),
-        ("Dépôt", repo),
-        ("Base", f"{ctx.base} (merge-base {ctx.merge_base[:12]})"),
-        ("Modèle", review.model),
-    ]
-    markdown = report.render("Revue hostile", header, review)
-    companion = {
-        "id": report_id,
-        "type": "hostile",
-        "created_at": created_at.isoformat(),
-        "repo": repo,
-        "base": ctx.base,
-        "merge_base": ctx.merge_base,
-        "model": review.model,
-        "summary": review.summary,
-        "findings": review.findings,
-    }
-    path = archive.save(archive.state_dir() / repo, report_id, markdown, companion)
+    hostile = report.HostileReport(
+        id=archive.new_id("hostile", created_at),
+        created_at=created_at,
+        repo=archive.repo_key(ctx.root, ctx.origin_url),
+        base=ctx.base,
+        merge_base=ctx.merge_base,
+        review=interpret.read_review(done),
+    )
+    markdown = hostile.markdown()
+    path = archive.save(archive.state_dir() / hostile.repo, hostile.id, markdown, hostile.companion())
     sys.stdout.write(f"Rapport : {path}\n\n{markdown}")
     return 0

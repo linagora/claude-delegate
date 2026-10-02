@@ -5,16 +5,31 @@ from __future__ import annotations
 import json
 import subprocess
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from . import schemas
 from .errors import DelegateError
 
 
 @dataclass(frozen=True)
+class Finding:
+    id: str
+    severity: str
+    file: str
+    line: Optional[int]
+    problem: str
+    failure_scenario: str
+    fix: str
+
+    @property
+    def location(self) -> str:
+        return self.file if self.line is None else f"{self.file}:{self.line}"
+
+
+@dataclass(frozen=True)
 class Review:
     summary: str
-    findings: List[Dict[str, Any]]
+    findings: List[Finding]
     model: str
 
 
@@ -40,13 +55,21 @@ def read_review(done: "subprocess.CompletedProcess[str]") -> Review:
     )
 
 
-def _numbered(findings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Most severe first (model order kept within a severity), numbered F1, F2…"""
+def _numbered(findings: List[Dict[str, Any]]) -> List[Finding]:
+    """Most severe first (model order kept within a severity), numbered F1, F2…
+    Only the schema fields are kept: an identifier proposed by the model is dropped."""
     ordered = sorted(findings, key=lambda f: schemas.SEVERITIES.index(f["severity"]))
-    fields = schemas.FINDING["required"]
     return [
-        {"id": f"F{n}", **{field: finding[field] for field in fields}}
-        for n, finding in enumerate(ordered, start=1)
+        Finding(
+            id=f"F{n}",
+            severity=f["severity"],
+            file=f["file"],
+            line=f["line"],
+            problem=f["problem"],
+            failure_scenario=f["failure_scenario"],
+            fix=f["fix"],
+        )
+        for n, f in enumerate(ordered, start=1)
     ]
 
 
