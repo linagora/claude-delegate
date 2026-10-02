@@ -1,4 +1,10 @@
-"""Checking a review again once its findings were addressed."""
+"""Checking a report again once its findings were addressed.
+
+A recheck rules on what the report it checks left open: the blocking and
+important findings of a hostile review, or, for an earlier recheck, the
+findings it did not find fixed and those it found. Rechecks thus follow
+the fixes one after another, numbering every new finding after the last.
+"""
 
 from __future__ import annotations
 
@@ -9,52 +15,42 @@ from typing import Any, Dict, List, Optional
 
 from . import archive, delegate, gitctx, report, schemas
 from .errors import EXIT_PREPARATION, DelegateError
-from .interpret import Finding
+from .interpret import Finding, Status
 
 #: The findings a recheck rules on, one by one.
-RULED_SEVERITIES = ("bloquant", "important")
+_RULED_SEVERITIES = ("bloquant", "important")
+#: A finding ruled so is closed: later rechecks no longer rule on it.
+_FIXED = "traité"
 
 _REVISION = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?")
 _FINDING_ID = re.compile(r"F[1-9][0-9]*")
 
 
 @dataclass(frozen=True)
-class Original:
-    """The review a recheck rules on, as its JSON companion records it."""
+class ReportToRecheck:
+    """A hostile review or an earlier recheck, as its JSON companion records it."""
 
     id: str
     base: str
     reviewed_revision: str
     requested_model: str
-    findings: List[Finding]
-
-    @property
-    def ruled(self) -> List[Finding]:
-        return [finding for finding in self.findings if finding.severity in RULED_SEVERITIES]
-
-    @property
-    def next_number(self) -> int:
-        """New findings are numbered after the original ones, so that no two
-        findings of a recheck share an identifier."""
-        return max((int(finding.id[1:]) for finding in self.findings), default=0) + 1
+    #: What the recheck rules on, oldest first.
+    open_findings: List[Finding]
+    #: The last ruling on an open finding, when an earlier recheck made one.
+    last_rulings: Dict[str, Status]
+    #: New findings are numbered from here, after every finding before them.
+    next_number: int
 
 
-def original(directory: Path, repo: str, designation: Optional[str]) -> Original:
-    """The review to check again: the designated report, else the latest of the
-    repository. A recheck stands for its original, so every recheck rules on
-    the findings of the review itself."""
+def report_to_recheck(repo: str, designation: Optional[str]) -> ReportToRecheck:
+    """The designated report of the repository, else its latest one."""
+    directory = archive.state_dir() / repo
     companion = archive.find(directory, designation) if designation else archive.latest(directory)
     if companion is None:
         raise DelegateError(
             "aucun rapport à re-revoir pour ce dépôt : lance d'abord /delegate:hostile-review", EXIT_PREPARATION
         )
     record = archive.load(companion)
-    if record.get("type") == report.RECHECK:
-        original_id = record.get("original")
-        if not isinstance(original_id, str) or not archive.is_report_id(original_id):
-            raise DelegateError(f"rapport illisible : {companion}", EXIT_PREPARATION)
-        companion = archive.find(companion.parent, original_id)
-        record = archive.load(companion)
     if record.get("repo") != repo:
         raise DelegateError(
             f"ce rapport concerne un autre dépôt ({record.get('repo')}), pas {repo}", EXIT_PREPARATION
@@ -64,22 +60,25 @@ def original(directory: Path, repo: str, designation: Optional[str]) -> Original
     return _parse(record, companion)
 
 
-def reviewer_input(review: Original, ctx: gitctx.RecheckContext) -> str:
-    """The findings to rule on, what changed since the review, then the full current diff."""
-    lines = [f"Constats de la revue d'origine {review.id} sur lesquels statuer :", ""]
-    for finding in review.ruled:
+def reviewer_input(earlier: ReportToRecheck, ctx: gitctx.RecheckContext) -> str:
+    """The findings to rule on, what changed since the report, then the full current diff."""
+    lines = [f"Constats du rapport {earlier.id} sur lesquels statuer :", ""]
+    for finding in earlier.open_findings:
         lines += [
             f"{finding.id} · {finding.severity} · {finding.location}",
             f"Problème : {finding.problem}",
             f"Scénario de défaillance : {finding.failure_scenario}",
             f"Correctif suggéré : {finding.fix}",
-            "",
         ]
-    if not review.ruled:
-        lines += ["(aucun constat bloquant ou important)", ""]
+        last = earlier.last_rulings.get(finding.id)
+        if last:
+            lines.append(f"Dernier statut : {last.status}. {last.justification}")
+        lines.append("")
+    if not earlier.open_findings:
+        lines += ["(aucun constat bloquant ou important ouvert)", ""]
     return (
         "\n".join(lines)
-        + "\n--- Début de l'écart, de la révision relue par la revue d'origine jusqu'à l'état courant ---\n"
+        + "\n--- Début de l'écart, de la révision relue par ce rapport jusqu'à l'état courant ---\n"
         + ctx.gap
         + "--- Fin de l'écart ---\n"
         + f"\n--- Début du diff complet courant, depuis le merge-base avec {ctx.base} ---\n"
@@ -88,29 +87,64 @@ def reviewer_input(review: Original, ctx: gitctx.RecheckContext) -> str:
     )
 
 
-def _parse(record: Dict[str, Any], companion: Path) -> Original:
+def _parse(record: Dict[str, Any], companion: Path) -> ReportToRecheck:
     def text(key: str) -> str:
         value = record.get(key)
         return value if isinstance(value, str) else ""
 
-    findings = record.get("findings")
+    kind = record.get("type")
+    findings = _findings(record.get("findings"))
+    rulings: Optional[List[Status]] = None
+    if kind == report.HOSTILE:
+        rulings = []
+    elif kind == report.RECHECK:
+        rulings = _rulings(record.get("statuses"))
     if (
-        record.get("type") != report.HOSTILE
+        findings is None
+        or rulings is None
         or not archive.is_report_id(text("id"))
         or not text("base")
         or not _REVISION.fullmatch(text("reviewed_revision"))
         or text("requested_model") not in delegate.MODELS
-        or not isinstance(findings, list)
-        or not all(_is_recorded_finding(finding) for finding in findings)
     ):
-        raise DelegateError(f"rapport illisible : {companion}", EXIT_PREPARATION)
-    return Original(
+        raise _unreadable(companion)
+    last = max((int(f.id[1:]) for f in findings + [ruling.finding for ruling in rulings]), default=0)
+    # A recheck records it: findings dropped from the chain keep their number.
+    next_number = record.get("next_finding_number") if kind == report.RECHECK else last + 1
+    if not isinstance(next_number, int) or isinstance(next_number, bool) or next_number <= last:
+        raise _unreadable(companion)
+    unresolved = [ruling for ruling in rulings if ruling.status != _FIXED]
+    return ReportToRecheck(
         id=text("id"),
         base=text("base"),
         reviewed_revision=text("reviewed_revision"),
         requested_model=text("requested_model"),
-        findings=[Finding.from_record(finding, finding["id"]) for finding in findings],
+        open_findings=[ruling.finding for ruling in unresolved]
+        + [finding for finding in findings if finding.severity in _RULED_SEVERITIES],
+        last_rulings={ruling.finding.id: ruling for ruling in unresolved},
+        next_number=next_number,
     )
+
+
+def _unreadable(companion: Path) -> DelegateError:
+    return DelegateError(f"rapport illisible : {companion}", EXIT_PREPARATION)
+
+
+def _findings(value: Any) -> Optional[List[Finding]]:
+    """Findings as a report records them, or None when they are malformed."""
+    if not isinstance(value, list) or not all(map(_is_recorded_finding, value)):
+        return None
+    return [Finding.from_record(finding, finding["id"]) for finding in value]
+
+
+def _rulings(value: Any) -> Optional[List[Status]]:
+    """A recheck's rulings as its report records them, or None when they are malformed."""
+    findings = _findings(value)
+    if findings is None or not all(
+        ruling.get("status") in schemas.STATUSES and isinstance(ruling.get("justification"), str) for ruling in value
+    ):
+        return None
+    return [Status(finding, ruling["status"], ruling["justification"]) for finding, ruling in zip(findings, value)]
 
 
 def _is_recorded_finding(value: Any) -> bool:

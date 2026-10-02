@@ -108,18 +108,19 @@ La revue ne démarre pas, avec le code de sortie 3, dans ces cas :
 /delegate:recheck [rapport]
 ```
 
-Après tes corrections, la commande fait statuer le relecteur sur chaque constat Bloquant ou Important de la revue d'origine : traité, non traité ou mal traité, avec une justification. Il relit aussi tout ce qui a changé depuis la révision relue alors, pour repérer les régressions introduites par les correctifs.
+Après tes corrections, la commande fait statuer le relecteur sur chaque constat Bloquant ou Important du rapport d'origine : traité, non traité ou mal traité, avec une justification. Il relit aussi tout ce qui a changé depuis la révision relue par ce rapport, pour repérer les régressions introduites par les correctifs.
 
-- Sans argument, la re-revue porte sur le dernier rapport du dépôt. Sinon, désigne un rapport par son identifiant, ou par le chemin de son Markdown ou de son JSON. Un rapport de re-revue renvoie à sa revue d'origine : chaque re-revue statue sur les constats de l'original.
-- Le relecteur reçoit les constats à statuer, l'écart depuis la révision relue d'origine et le diff complet courant. L'état courant est figé comme pour une revue hostile, fichiers non suivis compris. Le relecteur tourne avec le modèle de la revue d'origine.
-- Le rapport donne le statut de chaque constat d'origine, puis les nouveaux constats, numérotés à la suite des premiers. Son en-tête le relie à la revue d'origine.
+- Sans argument, la re-revue porte sur le dernier rapport du dépôt. Sinon, désigne un rapport par son identifiant, ou par le chemin de son Markdown ou de son JSON.
+- Une re-revue peut elle-même être re-revue : la suivante statue sur ce qu'elle a laissé ouvert, c'est-à-dire les constats non traités ou mal traités, avec leur dernier statut, et ses nouveaux constats bloquants ou importants. Tu peux ainsi enchaîner corrections et re-revues.
+- Le relecteur reçoit les constats à statuer, l'écart depuis la révision relue par le rapport d'origine et le diff complet courant. L'état courant est figé comme pour une revue hostile, fichiers non suivis compris. Le relecteur tourne avec le modèle de la revue d'origine.
+- Le rapport rappelle chaque constat statué et son statut, puis donne les nouveaux constats, numérotés à la suite de tous les précédents. Son en-tête le relie au rapport d'origine.
 - DeepSeek résume les statuts et liste ce qui reste bloquant.
 
 La re-revue ne démarre pas, avec le code de sortie 3, dans ces cas :
 
 - le rapport est introuvable, illisible, ou concerne un autre dépôt ;
-- rien n'a changé depuis la revue d'origine ;
-- git a purgé la révision relue par la revue d'origine : lance alors une revue complète.
+- rien n'a changé depuis le rapport d'origine ;
+- git a purgé la révision relue par le rapport d'origine : lance alors une revue complète.
 
 La re-revue d'une pull request n'est pas encore prise en charge.
 

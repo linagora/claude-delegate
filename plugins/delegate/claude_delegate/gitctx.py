@@ -82,7 +82,7 @@ class PullRequestContext:
 class RecheckContext:
     base: str
     merge_base: str
-    #: The revision the original review read.
+    #: The revision the rechecked report read.
     original_revision: str
     #: The current state, frozen as a hostile review freezes it.
     reviewed_revision: str
@@ -114,7 +114,7 @@ def hostile_context(cwd: Path, base: Optional[str]) -> HostileContext:
 def recheck_context(root: Path, base: str, original_revision: str) -> RecheckContext:
     if _commit(root, original_revision) is None:
         raise DelegateError(
-            f"révision relue par la revue d'origine introuvable ({original_revision[:12]}), sans doute purgée "
+            f"révision relue par le rapport d'origine introuvable ({original_revision[:12]}), sans doute purgée "
             "par git : lance une revue complète avec /delegate:hostile-review",
             EXIT_PREPARATION,
         )
@@ -122,7 +122,7 @@ def recheck_context(root: Path, base: str, original_revision: str) -> RecheckCon
     reviewed_revision = _freeze_working_tree(root)
     # Possibly empty: fixes may undo the whole change, findings still get ruled.
     diff = _diff(root, merge_base, reviewed_revision)
-    gap = _reviewable_diff(root, original_revision, reviewed_revision, "aucun changement depuis la revue d'origine")
+    gap = _reviewable_diff(root, original_revision, reviewed_revision, "aucun changement depuis le rapport d'origine")
     size = len(gap) + len(diff)
     if size > MAX_DIFF_CHARS:
         raise _too_large(size)

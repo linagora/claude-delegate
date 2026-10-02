@@ -100,18 +100,19 @@ def _pr_review(number: int, model: str) -> int:
 def _recheck(designation: Optional[str]) -> int:
     root = gitctx.repository(Path.cwd())
     repo = archive.repo_key(root, gitctx.origin_url(root))
-    original = recheck.original(archive.state_dir() / repo, repo, designation)
-    ctx = gitctx.recheck_context(root, original.base, original.reviewed_revision)
+    earlier = recheck.report_to_recheck(repo, designation)
+    ctx = gitctx.recheck_context(root, earlier.base, earlier.reviewed_revision)
     done, execution = delegate.launch(
         root,
-        recheck.reviewer_input(original, ctx),
-        schemas.recheck([finding.id for finding in original.ruled]),
+        recheck.reviewer_input(earlier, ctx),
+        schemas.recheck([finding.id for finding in earlier.open_findings]),
         prompts.recheck(ctx.conventions),
         "Re-revue des corrections décrites sur l'entrée standard.",
-        model=original.requested_model,
+        model=earlier.requested_model,
     )
-    review = interpret.read_recheck(done, original.ruled, original.next_number)
-    return _publish(repo, report.recheck_subject(original.id, ctx), execution, review)
+    review = interpret.read_recheck(done, earlier.open_findings, earlier.next_number)
+    subject = report.recheck_subject(earlier.id, ctx, earlier.next_number + len(review.findings))
+    return _publish(repo, subject, execution, review)
 
 
 def _publish(repo: str, subject: report.Subject, execution: delegate.Execution, review: interpret.Review) -> int:

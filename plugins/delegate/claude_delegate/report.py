@@ -72,13 +72,15 @@ def pr_subject(ctx: PullRequestContext) -> Subject:
     )
 
 
-def recheck_subject(original_id: str, ctx: RecheckContext) -> Subject:
+def recheck_subject(original_id: str, ctx: RecheckContext, next_finding_number: int) -> Subject:
+    """`next_finding_number` comes after every finding of the chain of rechecks,
+    those it no longer carries included."""
     return Subject(
         kind=RECHECK,
         slug=RECHECK,
         title="Re-revue",
         rows=[
-            ("Revue d'origine", original_id),
+            ("Rapport d'origine", original_id),
             _base_row(ctx.base, ctx.merge_base),
             ("Révision d'origine", _short(ctx.original_revision)),
             ("Révision relue", _short(ctx.reviewed_revision)),
@@ -89,6 +91,7 @@ def recheck_subject(original_id: str, ctx: RecheckContext) -> Subject:
             "merge_base": ctx.merge_base,
             "original_revision": ctx.original_revision,
             "reviewed_revision": ctx.reviewed_revision,
+            "next_finding_number": next_finding_number,
         },
     )
 
@@ -222,8 +225,9 @@ def _statuses(statuses: List[Status]) -> List[str]:
     return lines or ["Aucun constat bloquant ou important à vérifier.", ""]
 
 
-def _status_record(status: Status) -> Dict[str, str]:
-    return {"id": status.finding.id, "status": status.status, "justification": status.justification}
+def _status_record(status: Status) -> Dict[str, Any]:
+    """The finding in full, so that a later recheck can rule on it again."""
+    return {**asdict(status.finding), "status": status.status, "justification": status.justification}
 
 
 def _findings(findings: List[Finding]) -> List[str]:

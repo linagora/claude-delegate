@@ -105,7 +105,7 @@ class RecheckTest(FeatureBranchTestCase):
         result = self.sb.run("recheck")
 
         self.assertIn("# Re-revue\n", result.stdout)
-        self.assertIn(f"| Revue d'origine | {original} |", result.stdout)
+        self.assertIn(f"| Rapport d'origine | {original} |", result.stdout)
         for ruling in [
             "### F1 · app.py:2 (bloquant) : traité\n\n"
             "- **Problème** : Division par zéro non gérée\n"
@@ -119,10 +119,10 @@ class RecheckTest(FeatureBranchTestCase):
         companion = json.loads(report_path(result.stdout).with_suffix(".json").read_text(encoding="utf-8"))
         self.assertEqual((companion["type"], companion["original"]), ("recheck", original))
         self.assertEqual(
-            companion["statuses"],
+            [(s["id"], s["problem"], s["status"], s["justification"]) for s in companion["statuses"]],
             [
-                {"id": "F1", "status": "traité", "justification": "Justification de F1."},
-                {"id": "F2", "status": "mal traité", "justification": "Justification de F2."},
+                ("F1", "Division par zéro non gérée", "traité", "Justification de F1."),
+                ("F2", "Nom de fonction trop court", "mal traité", "Justification de F2."),
             ],
         )
         self.assertEqual([finding["id"] for finding in companion["findings"]], ["F4"])
@@ -147,7 +147,7 @@ class RecheckTest(FeatureBranchTestCase):
         result = self.sb.run("recheck", original)
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn(f"| Revue d'origine | {original} |", result.stdout)
+        self.assertIn(f"| Rapport d'origine | {original} |", result.stdout)
         stdin = self.sb.fake.last_call()["stdin"]
         self.assertIn("Division par zéro non gérée", stdin)
         self.assertNotIn(LATER_FINDING["problem"], stdin)
@@ -159,20 +159,33 @@ class RecheckTest(FeatureBranchTestCase):
                 result = self.sb.run("recheck", str(designation))
 
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertIn(f"| Revue d'origine | {report.stem} |", result.stdout)
+                self.assertIn(f"| Rapport d'origine | {report.stem} |", result.stdout)
 
-    def test_rechecking_a_recheck_rules_again_on_the_original_review(self) -> None:
-        original = self.review_then_fix().stem
-        self.assertEqual(self.sb.run("recheck").returncode, 0)
+    def test_rechecking_a_recheck_rules_on_what_it_left_open(self) -> None:
+        self.sb.fake.replies(
+            success(findings=ORIGINAL_FINDINGS),
+            rechecked(F1="traité", F2="mal traité"),
+            rechecked(F2="traité", F4="traité"),
+        )
+        self.review_then_fix()
+        first = report_path(self.sb.run("recheck").stdout)
         self.sb.write("app.py", "def div(a, b):\n    return a / b if b else FIXED_AGAIN\n")
 
         result = self.sb.run("recheck")
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn(f"| Revue d'origine | {original} |", result.stdout)
-        stdin = self.sb.fake.last_call()["stdin"]
-        self.assertIn("Division par zéro non gérée", stdin)
-        self.assertIn("-    return a / b if b else 0", stdin)
+        self.assertIn(f"| Rapport d'origine | {first.stem} |", result.stdout)
+        call = self.sb.fake.last_call()
+        # F1 was fixed; F2 was badly fixed and the first recheck found F4.
+        schema = json.loads(option(call["argv"], "--json-schema"))
+        self.assertEqual(schema["properties"]["statuses"]["required"], ["F2", "F4"])
+        self.assertNotIn("Division par zéro non gérée", call["stdin"])
+        self.assertIn(NEW_FINDING["problem"], call["stdin"])
+        self.assertIn("Dernier statut : mal traité. Justification de F2.", call["stdin"])
+        # The gap starts at the revision the first recheck read.
+        self.assertIn("-    return a / b if b else FIXED_COMMITTED", call["stdin"])
+        self.assertNotIn("-    return a / b if b else 0", call["stdin"])
+        self.assertIn("### F5 · app.py:2", result.stdout)
 
     def test_an_unknown_report_is_refused(self) -> None:
         self.review_then_fix()
@@ -199,7 +212,7 @@ class RecheckTest(FeatureBranchTestCase):
     def test_nothing_changed_since_the_review_leaves_nothing_to_recheck(self) -> None:
         self.review()
 
-        self.assert_refused([], "aucun changement depuis la revue d'origine")
+        self.assert_refused([], "aucun changement depuis le rapport d'origine")
 
     def test_fixes_that_undo_the_whole_change_are_still_ruled_on(self) -> None:
         self.review()

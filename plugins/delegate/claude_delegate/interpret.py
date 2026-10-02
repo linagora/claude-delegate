@@ -119,14 +119,14 @@ def read_pr_review(done: "subprocess.CompletedProcess[str]") -> Review:
     return replace(_review(payload, structured), verdict=verdict)
 
 
-def read_recheck(done: "subprocess.CompletedProcess[str]", ruled: List[Finding], first_number: int) -> Review:
-    """A recheck ruling on each of the `ruled` findings; its new findings are
-    numbered from `first_number`, after the original ones."""
+def read_recheck(done: "subprocess.CompletedProcess[str]", to_rule_on: List[Finding], first_number: int) -> Review:
+    """A recheck ruling on each finding of `to_rule_on`; its new findings are
+    numbered from `first_number`, after every earlier one."""
     payload = read_result(done)
-    ids = [finding.id for finding in ruled]
+    ids = [finding.id for finding in to_rule_on]
     structured = _structured_output(payload, lambda value: schemas.is_recheck(value, ids))
-    rulings = structured["statuses"]
-    statuses = [Status(f, rulings[f.id]["status"], rulings[f.id]["justification"]) for f in ruled]
+    by_id = structured["statuses"]
+    statuses = [Status(f, by_id[f.id]["status"], by_id[f.id]["justification"]) for f in to_rule_on]
     return replace(_review(payload, structured, first_number), statuses=statuses)
 
 
