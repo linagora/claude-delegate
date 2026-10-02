@@ -80,7 +80,9 @@ class SelftestTest(unittest.TestCase):
 
         call = self.sb.fake.last_call()
         files = call["cwd_files"]
-        outside = re.search(r"Lis le fichier (/\S+)/secret-hors-depot\.txt", call["stdin"]).group(1)
+        step = re.search(r"Lis le fichier (/\S+)/secret-hors-depot\.txt", call["stdin"])
+        assert step is not None, call["stdin"]
+        outside = step.group(1)
         self.assertEqual(str(Path(outside).resolve()), outside)
         settings = json.loads(files[".claude/settings.json"])
         self.assertEqual(settings["env"]["ANTHROPIC_BASE_URL"], "http://127.0.0.1:9")
