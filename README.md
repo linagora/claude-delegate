@@ -1,6 +1,6 @@
 # claude-delegate
 
-Plugin Claude Code qui délègue les revues de code d'une session branchée sur DeepSeek à Claude Opus. La revue tourne dans une session Claude Code isolée et en lecture seule, déclenchée de façon déterministe par une slash command. La spécification est dans l'issue #1.
+Plugin Claude Code qui délègue les revues de code d'une session branchée sur DeepSeek à Claude : Opus par défaut, Sonnet à la demande. La revue tourne dans une session Claude Code isolée et en lecture seule, déclenchée de façon déterministe par une slash command. La spécification est dans l'issue #1.
 
 ## Installation
 
@@ -81,7 +81,7 @@ Depuis un terminal : `<dossier du plugin>/bin/claude-delegate hostile-review [ba
 - **Configuration ignorée** : les settings, hooks, règles d'autorisation et `CLAUDE.md` du projet ne sont pas chargés, ni les serveurs MCP (`--strict-mcp-config`). En cas de demande non autorisée, le refus est automatique (`--permission-mode dontAsk`).
 - **Fichiers interdits** : `**/.env`, `**/.env.*` et `**/.claude/settings*.json`. Le relecteur ne peut pas les lire, et ils sont exclus du diff qu'il reçoit.
 - **Environnement reconstruit à partir de rien** : seules `HOME`, `USER`, `LOGNAME`, `PATH`, `LANG`, `LC_*`, `TERM` et `TMPDIR` passent, plus `CLAUDE_CONFIG_DIR=~/.claude-anthropic`. Aucune variable `ANTHROPIC_*` ou `CLAUDE_CODE_*` ni aucun jeton.
-- **Coût borné** : Opus en effort `high`, 30 tours au plus, et un plafond de 5 $ estimés. Ce plafond est souple : Claude Code le vérifie après chaque appel, il peut donc être dépassé d'un appel.
+- **Coût borné** : effort `high`, 30 tours au plus, et un plafond de 5 $ estimés. Ce plafond est souple : Claude Code le vérifie après chaque appel, il peut donc être dépassé d'un appel.
 
 Variables utiles :
 

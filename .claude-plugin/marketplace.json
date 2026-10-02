@@ -9,7 +9,7 @@
     {
       "name": "delegate",
       "source": "./plugins/delegate",
-      "description": "Revues de code déléguées à Claude Opus depuis une session DeepSeek, dans une session isolée en lecture seule"
+      "description": "Revues de code déléguées à Claude (Opus par défaut) depuis une session DeepSeek, dans une session isolée en lecture seule"
     }
   ]
 }
