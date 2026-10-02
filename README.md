@@ -36,7 +36,16 @@ Prérequis : Claude Code (de préférence le binaire natif, `~/.local/bin/claude
 /delegate:hostile-review [base]
 ```
 
-La commande relit les changements commités, indexés ou non depuis le merge-base avec la base. Sans argument, la base est la branche par défaut d'`origin`, ou `main` à défaut.
+La commande relit tous les changements depuis le merge-base avec la base : commités, indexés ou non, ainsi que les nouveaux fichiers non suivis, mais pas ceux qu'ignore git. Sans argument, la base est la branche par défaut d'`origin`, ou `main` à défaut.
+
+L'état relu est figé dans un commit technique non référencé, sans toucher à ton index. Son identifiant figure dans le rapport, à la ligne « Révision relue ». Le relecteur lit aussi les fichiers concernés dans ton arbre de travail : ne les modifie pas pendant la revue.
+
+La revue ne démarre pas, avec le code de sortie 3, dans ces cas :
+
+- le répertoire n'est pas un dépôt git, ou le dépôt n'a encore aucun commit ;
+- la base est introuvable, ou n'a aucun ancêtre commun avec `HEAD` ;
+- il n'y a rien à relire ;
+- le diff dépasse 1 000 000 caractères.
 
 Le rapport (constats Bloquant, Important et Mineur) est archivé dans `${XDG_STATE_HOME:-~/.local/state}/claude-delegate/<dépôt>/`, accompagné d'un JSON. Il est ensuite injecté dans la session. DeepSeek vérifie et classe chaque point sans rien modifier avant ta validation.
 
@@ -46,7 +55,7 @@ Depuis un terminal : `<dossier du plugin>/bin/claude-delegate hostile-review [ba
 
 - **Lecture seule** : `--restricted --tools "Read,Grep,Glob"`. Pas de shell, pas de web, pas d'écriture, et des lectures confinées au dépôt relu.
 - **Configuration ignorée** : les settings, hooks, règles d'autorisation et `CLAUDE.md` du projet ne sont pas chargés, ni les serveurs MCP (`--strict-mcp-config`). En cas de demande non autorisée, le refus est automatique (`--permission-mode dontAsk`).
-- **Lectures interdites** : `**/.env`, `**/.env.*` et `**/.claude/settings*.json`.
+- **Fichiers interdits** : `**/.env`, `**/.env.*` et `**/.claude/settings*.json`. Le relecteur ne peut pas les lire, et ils sont exclus du diff qu'il reçoit.
 - **Environnement reconstruit à partir de rien** : seules `HOME`, `USER`, `LOGNAME`, `PATH`, `LANG`, `LC_*`, `TERM` et `TMPDIR` passent, plus `CLAUDE_CONFIG_DIR=~/.claude-anthropic`. Aucune variable `ANTHROPIC_*` ou `CLAUDE_CODE_*` ni aucun jeton.
 - **Coût borné** : Opus en effort `high`, 30 tours au plus, et un plafond de 5 $ estimés. Ce plafond est souple : Claude Code le vérifie après chaque appel, il peut donc être dépassé d'un appel.
 

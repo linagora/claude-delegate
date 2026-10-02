@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+#: The review could not be prepared (git or forge); the reviewer was not called.
+EXIT_PREPARATION = 3
+
 
 class DelegateError(Exception):
     """A failure reported to the user on stderr, with a dedicated exit code."""

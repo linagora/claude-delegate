@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import json
 import unittest
-from pathlib import Path
 from typing import List
 
-from tests.support import SAMPLE_FINDING, FeatureBranchTestCase, success
+from tests.support import SAMPLE_FINDING, FeatureBranchTestCase, report_path, success
 
 
 def option(argv: List[str], name: str) -> str:
@@ -169,9 +168,8 @@ class HostileReviewTest(FeatureBranchTestCase):
     def test_report_is_archived_outside_the_repository_and_its_path_comes_first(self) -> None:
         result = self.sb.run("hostile-review", "main")
 
-        first_line, _, rest = result.stdout.partition("\n")
-        self.assertTrue(first_line.startswith("Rapport : "), first_line)
-        report = Path(first_line[len("Rapport : ") :])
+        report = report_path(result.stdout)
+        rest = result.stdout.partition("\n")[2]
         companion = report.with_suffix(".json")
         self.assertTrue(report.is_relative_to(self.sb.state / "claude-delegate"))
         self.assertEqual(report.read_text(encoding="utf-8"), rest.lstrip("\n"))
@@ -199,9 +197,9 @@ class HostileReviewTest(FeatureBranchTestCase):
             with self.subTest(url=url):
                 self.sb.git("remote", "set-url", "origin", url)
 
-                first_line = self.sb.run("hostile-review", "main").stdout.partition("\n")[0]
+                report = report_path(self.sb.run("hostile-review", "main").stdout)
 
-                self.assertEqual(Path(first_line[len("Rapport : ") :]).parent, expected)
+                self.assertEqual(report.parent, expected)
 
     def test_default_base_is_the_default_branch_of_origin(self) -> None:
         origin = self.sb.root / "origin.git"

@@ -76,6 +76,13 @@ def success(
     }
 
 
+def report_path(stdout: str) -> Path:
+    """The archived report announced on the first line of the CLI output."""
+    first_line = stdout.partition("\n")[0]
+    assert first_line.startswith("Rapport : "), first_line
+    return Path(first_line[len("Rapport : ") :])
+
+
 class FakeClaude:
     """Stand-in for the `claude` binary: records each call, replies with a canned result."""
 

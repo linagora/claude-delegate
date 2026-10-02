@@ -44,8 +44,7 @@ def _hostile_review(base: Optional[str]) -> int:
         id=archive.new_id("hostile", created_at),
         created_at=created_at,
         repo=archive.repo_key(ctx.root, ctx.origin_url),
-        base=ctx.base,
-        merge_base=ctx.merge_base,
+        context=ctx,
         review=interpret.read_review(done),
     )
     markdown = hostile.markdown()

@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Tuple
 
+from .gitctx import HostileContext
 from .interpret import Finding, Review
 from .schemas import SEVERITIES
 
@@ -15,8 +16,7 @@ class HostileReport:
     id: str
     created_at: datetime
     repo: str
-    base: str
-    merge_base: str
+    context: HostileContext
     review: Review
 
     def markdown(self) -> str:
@@ -28,8 +28,9 @@ class HostileReport:
             "type": "hostile",
             "created_at": self.created_at.isoformat(),
             "repo": self.repo,
-            "base": self.base,
-            "merge_base": self.merge_base,
+            "base": self.context.base,
+            "merge_base": self.context.merge_base,
+            "reviewed_revision": self.context.reviewed_revision,
             "model": self.review.model,
             "summary": self.review.summary,
             "findings": [asdict(finding) for finding in self.review.findings],
@@ -40,9 +41,15 @@ class HostileReport:
             ("Identifiant", self.id),
             ("Date (UTC)", f"{self.created_at:%Y-%m-%d %H:%M:%S}"),
             ("Dépôt", self.repo),
-            ("Base", f"{self.base} (merge-base {self.merge_base[:12]})"),
+            ("Base", f"{self.context.base} (merge-base {_short(self.context.merge_base)})"),
+            ("Révision relue", _short(self.context.reviewed_revision)),
             ("Modèle", self.review.model),
         ]
+
+
+def _short(revision: str) -> str:
+    """Abbreviated commit id, as shown in report headers."""
+    return revision[:12]
 
 
 def _render(title: str, header: List[Tuple[str, str]], review: Review) -> str:
