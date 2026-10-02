@@ -82,8 +82,8 @@ def reviewer_input(review: Original, ctx: gitctx.RecheckContext) -> str:
         + "\n--- Début de l'écart, de la révision relue par la revue d'origine jusqu'à l'état courant ---\n"
         + ctx.gap
         + "--- Fin de l'écart ---\n"
-        + f"\n--- Début du diff complet courant, depuis le merge-base avec {ctx.current.base} ---\n"
-        + ctx.current.diff
+        + f"\n--- Début du diff complet courant, depuis le merge-base avec {ctx.base} ---\n"
+        + ctx.diff
         + "--- Fin du diff complet courant ---\n"
     )
 

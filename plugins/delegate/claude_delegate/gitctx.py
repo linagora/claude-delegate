@@ -80,24 +80,24 @@ class PullRequestContext:
 
 @dataclass(frozen=True)
 class RecheckContext:
-    #: The current state, prepared as a hostile review prepares it.
-    current: HostileContext
+    base: str
+    merge_base: str
     #: The revision the original review read.
     original_revision: str
+    #: The current state, frozen as a hostile review freezes it.
+    reviewed_revision: str
     #: What changed since: from the original revision to the current one.
     gap: str
+    #: The full current diff, from the merge-base.
+    diff: str
+    #: The root CLAUDE.md at the merge-base, never from the reviewed work.
+    conventions: Optional[str]
 
 
 def hostile_context(cwd: Path, base: Optional[str]) -> HostileContext:
     root = repository(cwd)
-    if _git_or_none(root, "rev-parse", "--verify", "--quiet", "HEAD^{commit}") is None:
-        raise DelegateError("le dépôt n'a encore aucun commit", EXIT_PREPARATION)
     base = base or default_base(root)
-    if _git_or_none(root, "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}") is None:
-        raise DelegateError(f"base introuvable : {base}", EXIT_PREPARATION)
-    merge_base = _git_or_none(root, "merge-base", base, "HEAD")
-    if merge_base is None:
-        raise DelegateError(f"aucun ancêtre commun entre {base} et HEAD", EXIT_PREPARATION)
+    merge_base = _merge_base(root, base)
     conventions_text = trusted_conventions(root, merge_base)
     reviewed_revision = _freeze_working_tree(root)
     return HostileContext(
@@ -112,19 +112,28 @@ def hostile_context(cwd: Path, base: Optional[str]) -> HostileContext:
 
 
 def recheck_context(root: Path, base: str, original_revision: str) -> RecheckContext:
-    if _git_or_none(root, "rev-parse", "--verify", "--quiet", f"{original_revision}^{{commit}}") is None:
+    if _commit(root, original_revision) is None:
         raise DelegateError(
             f"révision relue par la revue d'origine introuvable ({original_revision[:12]}), sans doute purgée "
             "par git : lance une revue complète avec /delegate:hostile-review",
             EXIT_PREPARATION,
         )
-    current = hostile_context(root, base)
-    gap = _reviewable_diff(
-        root, original_revision, current.reviewed_revision, "aucun changement depuis la revue d'origine"
+    merge_base = _merge_base(root, base)
+    reviewed_revision = _freeze_working_tree(root)
+    diff = _reviewable_diff(root, merge_base, reviewed_revision, f"aucun changement depuis {base}")
+    gap = _reviewable_diff(root, original_revision, reviewed_revision, "aucun changement depuis la revue d'origine")
+    size = len(gap) + len(diff)
+    if size > MAX_DIFF_CHARS:
+        raise _too_large(size)
+    return RecheckContext(
+        base=base,
+        merge_base=merge_base,
+        original_revision=original_revision,
+        reviewed_revision=reviewed_revision,
+        gap=gap,
+        diff=diff,
+        conventions=trusted_conventions(root, merge_base),
     )
-    if len(gap) + len(current.diff) > MAX_DIFF_CHARS:
-        raise _too_large(len(gap) + len(current.diff))
-    return RecheckContext(current=current, original_revision=original_revision, gap=gap)
 
 
 def pull_request_context(cwd: Path, number: int) -> PullRequestContext:
@@ -206,6 +215,23 @@ def git(cwd: Path, *args: str, strip: bool = True, env: Optional[Dict[str, str]]
     if done.returncode != 0:
         raise DelegateError(f"git {' '.join(args)} a échoué : {done.stderr.strip()}", EXIT_PREPARATION)
     return done.stdout.strip() if strip else done.stdout
+
+
+def _merge_base(root: Path, base: str) -> str:
+    """Where the reviewed work starts from `base`: their merge-base with HEAD."""
+    if _commit(root, "HEAD") is None:
+        raise DelegateError("le dépôt n'a encore aucun commit", EXIT_PREPARATION)
+    if _commit(root, base) is None:
+        raise DelegateError(f"base introuvable : {base}", EXIT_PREPARATION)
+    merge_base = _git_or_none(root, "merge-base", base, "HEAD")
+    if merge_base is None:
+        raise DelegateError(f"aucun ancêtre commun entre {base} et HEAD", EXIT_PREPARATION)
+    return merge_base
+
+
+def _commit(root: Path, revision: str) -> Optional[str]:
+    """The commit `revision` names, or None when it names none."""
+    return _git_or_none(root, "rev-parse", "--verify", "--quiet", f"{revision}^{{commit}}")
 
 
 def _reviewable_diff(root: Path, start: str, end: str, empty_reason: str) -> str:

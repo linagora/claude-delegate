@@ -106,7 +106,7 @@ def _recheck(designation: Optional[str]) -> int:
         root,
         recheck.reviewer_input(original, ctx),
         schemas.recheck([finding.id for finding in original.ruled]),
-        prompts.recheck(ctx.current.conventions),
+        prompts.recheck(ctx.conventions),
         "Re-revue des corrections décrites sur l'entrée standard.",
         model=original.requested_model,
     )

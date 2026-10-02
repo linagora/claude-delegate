@@ -32,7 +32,7 @@ def hostile_subject(ctx: HostileContext) -> Subject:
         slug="hostile",
         title="Revue hostile",
         rows=[
-            ("Base", f"{ctx.base} (merge-base {_short(ctx.merge_base)})"),
+            _base_row(ctx.base, ctx.merge_base),
             ("Révision relue", _short(ctx.reviewed_revision)),
         ],
         fields={
@@ -69,23 +69,22 @@ def pr_subject(ctx: PullRequestContext) -> Subject:
 
 
 def recheck_subject(original_id: str, ctx: RecheckContext) -> Subject:
-    current = ctx.current
     return Subject(
         kind="recheck",
         slug="recheck",
         title="Re-revue",
         rows=[
             ("Revue d'origine", original_id),
-            ("Base", f"{current.base} (merge-base {_short(current.merge_base)})"),
+            _base_row(ctx.base, ctx.merge_base),
             ("Révision d'origine", _short(ctx.original_revision)),
-            ("Révision relue", _short(current.reviewed_revision)),
+            ("Révision relue", _short(ctx.reviewed_revision)),
         ],
         fields={
             "original": original_id,
-            "base": current.base,
-            "merge_base": current.merge_base,
+            "base": ctx.base,
+            "merge_base": ctx.merge_base,
             "original_revision": ctx.original_revision,
-            "reviewed_revision": current.reviewed_revision,
+            "reviewed_revision": ctx.reviewed_revision,
         },
     )
 
@@ -147,6 +146,10 @@ class Report:
 def _cell(text: str) -> str:
     """Keep a value inside its Markdown table cell."""
     return " ".join(text.split()).replace("|", "\\|")
+
+
+def _base_row(base: str, merge_base: str) -> Tuple[str, str]:
+    return ("Base", f"{base} (merge-base {_short(merge_base)})")
 
 
 def _short(digest: str) -> str:
