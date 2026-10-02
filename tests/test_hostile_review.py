@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from typing import List
 
-from tests.support import FINDING, Sandbox, success
+from tests.support import SAMPLE_FINDING, FeatureBranchTestCase, success
 
 
 def option(argv: List[str], name: str) -> str:
@@ -19,15 +19,7 @@ def section(report: str, title: str) -> str:
     return body.split("\n## ", 1)[0].strip()
 
 
-class HostileReviewTest(unittest.TestCase):
-    def setUp(self) -> None:
-        self.sb = Sandbox()
-        self.addCleanup(self.sb.cleanup)
-        self.sb.init_repo()
-        self.sb.git("switch", "-q", "-c", "feature")
-        self.sb.write("app.py", "def div(a, b):\n    return a / b if b else 0\n")
-        self.sb.commit_all("feature change")
-
+class HostileReviewTest(FeatureBranchTestCase):
     def test_review_reports_the_delegate_findings(self) -> None:
         result = self.sb.run("hostile-review", "main")
 
@@ -129,8 +121,8 @@ class HostileReviewTest(unittest.TestCase):
         self.sb.fake.reply(
             success(
                 findings=[
-                    {**FINDING, "severity": "mineur", "line": None, "problem": "Nom trompeur"},
-                    {**FINDING, "severity": "bloquant", "problem": "Division par zéro non gérée"},
+                    {**SAMPLE_FINDING, "severity": "mineur", "line": None, "problem": "Nom trompeur"},
+                    {**SAMPLE_FINDING, "severity": "bloquant", "problem": "Division par zéro non gérée"},
                 ]
             )
         )
@@ -147,8 +139,8 @@ class HostileReviewTest(unittest.TestCase):
         self.sb.fake.reply(
             success(
                 findings=[
-                    {**FINDING, "id": "BUG-7"},
-                    {**FINDING, "id": "BUG-7", "problem": "Un second défaut"},
+                    {**SAMPLE_FINDING, "id": "BUG-7"},
+                    {**SAMPLE_FINDING, "id": "BUG-7", "problem": "Un second défaut"},
                 ]
             )
         )
@@ -160,10 +152,10 @@ class HostileReviewTest(unittest.TestCase):
         self.assertNotIn("BUG-7", report)
 
     def test_structured_output_that_breaks_the_schema_is_rejected(self) -> None:
-        without_line = {k: v for k, v in FINDING.items() if k != "line"}
+        without_line = {k: v for k, v in SAMPLE_FINDING.items() if k != "line"}
         for name, finding in [
             ("ligne absente", without_line),
-            ("gravité inconnue", {**FINDING, "severity": "critique"}),
+            ("gravité inconnue", {**SAMPLE_FINDING, "severity": "critique"}),
         ]:
             with self.subTest(name):
                 self.sb.fake.reply(success(findings=[finding]))

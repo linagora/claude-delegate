@@ -12,6 +12,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import unittest
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -19,7 +20,7 @@ ROOT = Path(__file__).resolve().parent.parent
 PLUGIN = ROOT / "plugins" / "delegate"
 BIN = PLUGIN / "bin" / "claude-delegate"
 
-FINDING = {
+SAMPLE_FINDING = {
     "severity": "bloquant",
     "file": "app.py",
     "line": 2,
@@ -59,7 +60,7 @@ def success(
     model: str = "claude-opus-5-5",
 ) -> Dict[str, Any]:
     """A `claude -p --output-format json` result carrying structured output."""
-    structured = {"summary": summary, "findings": [FINDING] if findings is None else findings}
+    structured = {"summary": summary, "findings": [SAMPLE_FINDING] if findings is None else findings}
     return {
         "type": "result",
         "subtype": "success",
@@ -179,3 +180,15 @@ class Sandbox:
             capture_output=True,
             text=True,
         )
+
+
+class FeatureBranchTestCase(unittest.TestCase):
+    """A sandbox whose `feature` branch changes app.py in one commit on top of `main`."""
+
+    def setUp(self) -> None:
+        self.sb = Sandbox()
+        self.addCleanup(self.sb.cleanup)
+        self.sb.init_repo()
+        self.sb.git("switch", "-q", "-c", "feature")
+        self.sb.write("app.py", "def div(a, b):\n    return a / b if b else 0\n")
+        self.sb.commit_all("feature change")

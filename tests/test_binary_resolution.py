@@ -4,20 +4,12 @@ import os
 import unittest
 from pathlib import Path
 
-from tests.support import Sandbox
+from tests.support import FeatureBranchTestCase
 
 CMUX_SHIM = "#!/bin/sh\n# cmux claude wrapper: injects hooks and session tracking\nexit 97\n"
 
 
-class BinaryResolutionTest(unittest.TestCase):
-    def setUp(self) -> None:
-        self.sb = Sandbox()
-        self.addCleanup(self.sb.cleanup)
-        self.sb.init_repo()
-        self.sb.git("switch", "-q", "-c", "feature")
-        self.sb.write("app.py", "def div(a, b):\n    return a / b if b else 0\n")
-        self.sb.commit_all("feature change")
-
+class BinaryResolutionTest(FeatureBranchTestCase):
     def _executable(self, path: Path, content: str) -> Path:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
