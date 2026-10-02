@@ -79,7 +79,7 @@ class PullRequestContext:
 
 
 def hostile_context(cwd: Path, base: Optional[str]) -> HostileContext:
-    root = _repository(cwd)
+    root = repository(cwd)
     if _git_or_none(root, "rev-parse", "--verify", "--quiet", "HEAD^{commit}") is None:
         raise DelegateError("le dépôt n'a encore aucun commit", EXIT_PREPARATION)
     base = base or default_base(root)
@@ -102,7 +102,7 @@ def hostile_context(cwd: Path, base: Optional[str]) -> HostileContext:
 
 
 def pull_request_context(cwd: Path, number: int) -> PullRequestContext:
-    root = _repository(cwd)
+    root = repository(cwd)
     origin = origin_url(root)
     pr = forge.pull_request(origin, number)
     base_revision = _fetch(root, f"refs/heads/{pr.base}")
@@ -155,6 +155,14 @@ def default_base(root: Path) -> str:
     return _git_or_none(root, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD") or "main"
 
 
+def repository(cwd: Path) -> Path:
+    """The root of the repository holding `cwd`."""
+    toplevel = _git_or_none(cwd, "rev-parse", "--show-toplevel")
+    if toplevel is None:
+        raise DelegateError(f"pas un dépôt git : {cwd}", EXIT_PREPARATION)
+    return Path(toplevel)
+
+
 def origin_url(root: Path) -> Optional[str]:
     """origin's URL as git reaches it, which resolves insteadOf aliases such as
     gh:owner/name. When a rule rewrites it to a local path (a mirror), the URL
@@ -172,14 +180,6 @@ def git(cwd: Path, *args: str, strip: bool = True, env: Optional[Dict[str, str]]
     if done.returncode != 0:
         raise DelegateError(f"git {' '.join(args)} a échoué : {done.stderr.strip()}", EXIT_PREPARATION)
     return done.stdout.strip() if strip else done.stdout
-
-
-def _repository(cwd: Path) -> Path:
-    """The root of the repository holding `cwd`."""
-    toplevel = _git_or_none(cwd, "rev-parse", "--show-toplevel")
-    if toplevel is None:
-        raise DelegateError(f"pas un dépôt git : {cwd}", EXIT_PREPARATION)
-    return Path(toplevel)
 
 
 def _reviewable_diff(root: Path, start: str, end: str, empty_reason: str) -> str:
