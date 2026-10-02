@@ -85,7 +85,7 @@ L'en-tête du rapport indique comment la revue a tourné :
 La commande relit une pull request GitHub sur son propre code, et non sur ta branche locale. `origin` doit être sur `github.com`, et `gh` doit y être connecté (`gh auth login`).
 
 - `gh` fournit le titre, la description, la branche cible, la tête et l'URL de la pull request.
-- git récupère la branche cible, ce qui met à jour `origin/<branche cible>`, puis la tête de la pull request (`pull/<numéro>/head`). Ta branche, ton index et ton arbre de travail ne changent pas.
+- git récupère la branche cible et la tête de la pull request (`pull/<numéro>/head`) sans déplacer aucune référence de ton dépôt. Ta branche, ton index et ton arbre de travail ne changent pas non plus.
 - Le relecteur lit la pull request dans un worktree détaché et jetable, créé hors du dépôt sans exécuter aucun hook git. Le CLI en retire d'abord tous les `CLAUDE.md`, `CLAUDE.local.md`, `.claude/` et `.mcp.json`, quelle que soit leur casse : la configuration apportée par la pull request n'atteint jamais le relecteur. Le worktree est supprimé à la fin, même en cas d'échec ou d'interruption.
 - Le relecteur reçoit le titre, la description et le diff depuis le merge-base avec la branche cible. Ses conventions sont celles de la branche cible, jamais celles de la pull request : une modification de `CLAUDE.md` est relue comme du code.
 - Le rapport donne un verdict, APPROVE ou REQUEST_CHANGES, justifié en une phrase. Son en-tête indique le numéro et l'URL de la pull request, sa branche cible et la tête relue.

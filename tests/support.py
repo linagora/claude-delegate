@@ -345,6 +345,14 @@ class PullRequestTestCase(unittest.TestCase):
         """Commit `files` on top of origin's main in the contributor's clone and
         publish them as refs/pull/7/head only, as from a fork: the repository
         under review only gets them by fetching. gh then describes that head."""
+        self.head = self._publish_from_contributor(files, f"refs/pull/{self.NUMBER}/head")
+        self.gh.reply(self.metadata())
+
+    def move_target_branch(self, files: Dict[str, str]) -> None:
+        """Someone else merges `files` into main on the forge."""
+        self._publish_from_contributor(files, "refs/heads/main")
+
+    def _publish_from_contributor(self, files: Dict[str, str], ref: str) -> str:
         clone = self.contributor
         self.sb.git("fetch", "-q", "origin", cwd=clone)
         self.sb.git("switch", "-q", "--detach", "origin/main", cwd=clone)
@@ -353,10 +361,9 @@ class PullRequestTestCase(unittest.TestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content, encoding="utf-8")
         self.sb.git("add", "-A", cwd=clone)
-        self.sb.git("commit", "-q", "-m", "pull request work", cwd=clone)
-        self.sb.git("push", "-q", "-f", "origin", f"HEAD:refs/pull/{self.NUMBER}/head", cwd=clone)
-        self.head = self.sb.git("rev-parse", "HEAD", cwd=clone)
-        self.gh.reply(self.metadata())
+        self.sb.git("commit", "-q", "-m", "contributor work", cwd=clone)
+        self.sb.git("push", "-q", "-f", "origin", f"HEAD:{ref}", cwd=clone)
+        return self.sb.git("rev-parse", "HEAD", cwd=clone)
 
     def metadata(self, **fields: Any) -> Dict[str, Any]:
         return {

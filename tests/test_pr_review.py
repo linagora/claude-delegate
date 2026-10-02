@@ -83,6 +83,15 @@ class PullRequestReviewTest(PullRequestTestCase):
             self.gh.calls(),
         )
 
+    def test_the_review_moves_no_ref_of_the_repository(self) -> None:
+        self.move_target_branch({"later.py": "LATER_ON_MAIN = 1\n"})
+        refs = self.sb.git("for-each-ref")
+
+        result = self.run_pr()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.sb.git("for-each-ref"), refs)
+
     def test_the_pull_request_configuration_never_reaches_the_reviewer(self) -> None:
         self.update_pull_request(
             {

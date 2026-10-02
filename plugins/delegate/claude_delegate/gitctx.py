@@ -51,7 +51,7 @@ class PullRequestContext:
     root: Path
     origin_url: Optional[str]
     pull_request: forge.PullRequest
-    #: The tip of the target branch, fetched for the review.
+    #: The tip of the target branch on origin, fetched for the review.
     base_revision: str
     merge_base: str
     diff: str
@@ -102,9 +102,8 @@ def pull_request_context(cwd: Path, number: int) -> PullRequestContext:
     root = _repository(cwd)
     origin = origin_url(root)
     pr = forge.pull_request(origin, number)
-    tracking = f"refs/remotes/origin/{pr.base}"
-    base_revision = _fetch(root, f"+refs/heads/{pr.base}:{tracking}", tracking)
-    head = _fetch(root, pr.ref, "FETCH_HEAD")
+    base_revision = _fetch(root, f"refs/heads/{pr.base}")
+    head = _fetch(root, pr.ref)
     if head != pr.head:
         raise DelegateError(
             f"la pull request #{number} a changé pendant la préparation (tête {pr.head[:12]} selon la forge, "
@@ -193,11 +192,13 @@ def _reviewable_diff(root: Path, start: str, end: str, unchanged: str) -> str:
     return diff
 
 
-def _fetch(root: Path, refspec: str, fetched: str) -> str:
-    """Fetch `refspec` from origin; returns the commit `fetched` then names."""
+def _fetch(root: Path, ref: str) -> str:
+    """The commit of origin's `ref`, fetched without moving any ref of the
+    repository: an empty --refmap stops git from updating the remote-tracking
+    branch of a branch fetched by name."""
     no_prompt = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
-    git(root, "fetch", "--quiet", "--no-tags", "--no-recurse-submodules", "origin", refspec, env=no_prompt)
-    return git(root, "rev-parse", "--verify", f"{fetched}^{{commit}}")
+    git(root, "fetch", "--quiet", "--no-tags", "--no-recurse-submodules", "--refmap=", "origin", ref, env=no_prompt)
+    return git(root, "rev-parse", "--verify", "FETCH_HEAD^{commit}")
 
 
 def _strip_reviewer_configuration(tree: Path) -> None:
