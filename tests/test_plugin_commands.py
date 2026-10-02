@@ -95,6 +95,16 @@ class PluginCommandsTest(unittest.TestCase):
         self.assertIn("« Fichiers non relus »", body)
         self.assertIn("Ne publie rien", body)
 
+    def test_the_recheck_command_sums_up_the_statuses_and_what_remains_blocking(self) -> None:
+        _, body = parse_command(PLUGIN / "commands" / "recheck.md")
+
+        self.assertEqual(
+            shell_invocations(body),
+            [f"{PLUGIN_ROOT_VAR}/bin/claude-delegate recheck $ARGUMENTS"],
+        )
+        self.assertIn("« Constats d'origine »", body)
+        self.assertIn("reste bloquant", body)
+
     def test_handoff_writes_a_dated_brief_without_shell_and_points_to_a_spec_session(self) -> None:
         _, body = parse_command(PLUGIN / "commands" / "handoff.md")
 
