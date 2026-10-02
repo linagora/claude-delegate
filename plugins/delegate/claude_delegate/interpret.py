@@ -18,6 +18,9 @@ _USAGE_LIMIT = re.compile(r"hit your [^\n]*limit|limit reached|out of (?:extra )
 #: The reset time ends at the end of the line or at the next separator.
 _RESETS = re.compile(r"\bresets\s+([^\n·∙|]+)", re.IGNORECASE)
 
+#: The reviewer's dedicated config dir has no Anthropic login yet.
+_NOT_LOGGED_IN = re.compile(r"not logged in|please run /login|invalid api key", re.IGNORECASE)
+
 #: Results cut short by the review's own caps.
 _INCOMPLETE = {
     "error_max_budget_usd": "revue incomplète : plafond de budget atteint",
@@ -131,6 +134,11 @@ def _raise_on_failure(payload: Dict[str, Any], returncode: int) -> None:
         resets = _RESETS.search(reason)
         when = f" (reprise : {resets.group(1).strip().rstrip('.')})" if resets else ""
         raise DelegateError(f"quota Claude épuisé{when}", EXIT_QUOTA)
+    if _NOT_LOGGED_IN.search(reason):
+        raise DelegateError(
+            "le relecteur n'est pas connecté à Anthropic : lance une fois "
+            "`CLAUDE_CONFIG_DIR=~/.claude-anthropic claude`, puis /login"
+        )
     if payload.get("api_error_status") == 429:
         raise DelegateError(f"limite de débit Claude atteinte : {_excerpt(reason)}", EXIT_QUOTA)
     raise DelegateError(f"la revue a échoué : {_excerpt(reason)}")

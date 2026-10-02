@@ -92,6 +92,11 @@ class FailureTest(FeatureBranchTestCase):
         self.assertNotIn("Traceback", result.stderr)
         self.assertEqual(result.stdout, "")
 
+    def test_a_reviewer_that_is_not_logged_in_says_how_to_log_in(self) -> None:
+        self.sb.fake.reply(failed(subtype="success", result="Not logged in · Please run /login"), 1)
+
+        self.assert_failure(DELEGATE_FAILURE, "CLAUDE_CONFIG_DIR=~/.claude-anthropic claude")
+
     def test_any_other_error_is_a_delegate_failure(self) -> None:
         for name, stdout, code in [
             ("erreur signalée", json.dumps(failed(result="Internal server error")), 1),
