@@ -21,16 +21,22 @@ def main(argv: Optional[List[str]] = None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     hostile = commands.add_parser("hostile-review", help="Revue hostile des changements en cours.")
     hostile.add_argument("base", nargs="?", help="Branche de base (défaut : branche par défaut d'origin).")
+    hostile.add_argument(
+        "--model",
+        choices=delegate.MODELS,
+        default=delegate.DEFAULT_MODEL,
+        help=f"Modèle du relecteur (défaut : {delegate.DEFAULT_MODEL}).",
+    )
     args = parser.parse_args(argv)
 
     try:
-        return _hostile_review(args.base)
+        return _hostile_review(args.base, args.model)
     except DelegateError as error:
         print(f"claude-delegate : {error}", file=sys.stderr)
         return error.exit_code
 
 
-def _hostile_review(base: Optional[str]) -> int:
+def _hostile_review(base: Optional[str], model: str) -> int:
     ctx = gitctx.hostile_context(Path.cwd(), base)
     done, execution = delegate.launch(
         ctx.root,
@@ -38,6 +44,7 @@ def _hostile_review(base: Optional[str]) -> int:
         schemas.HOSTILE_REVIEW,
         delegate.PROMPTS / "hostile-review.md",
         "Revue hostile du diff fourni sur l'entrée standard.",
+        model=model,
     )
     created_at = datetime.now(timezone.utc)
     hostile = report.HostileReport(

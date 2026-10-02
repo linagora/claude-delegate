@@ -221,6 +221,14 @@ class HostileReviewTest(FeatureBranchTestCase):
         self.assertEqual(companion["claude_code_version"], "9.9.9")
         self.assertEqual(companion["permission_denials"], ["Read /repo/.env"])
 
+    def test_sonnet_can_be_requested_and_other_models_are_refused(self) -> None:
+        self.sb.run("hostile-review", "main", "--model", "sonnet")
+
+        self.assertEqual(option(self.sb.fake.last_call()["argv"], "--model"), "sonnet")
+        refused = self.sb.run("hostile-review", "main", "--model", "haiku")
+        self.assertEqual(refused.returncode, 2)
+        self.assertEqual(len(self.sb.fake.calls()), 1)
+
     def test_reports_are_filed_under_the_origin_repository_without_credentials(self) -> None:
         expected = self.sb.state / "claude-delegate" / "github.com" / "linagora" / "claude-delegate"
         self.sb.git("remote", "add", "origin", "git@github.com:linagora/claude-delegate.git")

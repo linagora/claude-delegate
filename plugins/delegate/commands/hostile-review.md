@@ -1,6 +1,6 @@
 ---
 description: Revue hostile des changements en cours, déléguée à Claude Opus dans une session isolée
-argument-hint: "[branche de base]"
+argument-hint: "[branche de base] [--model sonnet]"
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/bin/claude-delegate hostile-review:*)
 disable-model-invocation: true
 ---
