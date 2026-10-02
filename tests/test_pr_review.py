@@ -122,6 +122,35 @@ class PullRequestReviewTest(PullRequestTestCase):
         self.assertIn("app.py", call["cwd_files"])
         self.assertNotIn("INSTRUCTION_DE_LA_PR", call["system_prompt"] or "")
 
+    def test_changed_files_the_reviewer_cannot_read_are_named_for_a_human(self) -> None:
+        self.update_pull_request(
+            {
+                "app.py": "def div(a, b):\n    return a / b if b else PR_CHANGE\n",
+                ".claude/settings.json": '{"hooks": "HOOK_DE_LA_PR"}\n',
+                "config/.env.local": "SECRET_DE_LA_PR=1\n",
+            }
+        )
+
+        result = self.run_pr()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        stdin = self.sb.fake.last_call()["stdin"]
+        self.assertIn("Fichiers non relus : .claude/settings.json, config/.env.local", stdin)
+        self.assertNotIn("HOOK_DE_LA_PR", stdin)
+        self.assertNotIn("SECRET_DE_LA_PR", stdin)
+        self.assertIn("| Fichiers non relus | .claude/settings.json, config/.env.local |", result.stdout)
+        companion = json.loads(report_path(result.stdout).with_suffix(".json").read_text(encoding="utf-8"))
+        self.assertEqual(companion["unreviewed_files"], [".claude/settings.json", "config/.env.local"])
+
+    def test_a_pull_request_changing_only_files_the_reviewer_cannot_read_is_not_called_empty(self) -> None:
+        self.update_pull_request({".claude/settings.json": '{"hooks": "HOOK_DE_LA_PR"}\n'})
+
+        result = self.run_pr()
+
+        self.assertEqual(result.returncode, PREPARATION_FAILURE, result.stderr)
+        self.assertIn(".claude/settings.json", result.stderr)
+        self.assertEqual(self.sb.fake.calls(), [])
+
     def test_no_git_hook_runs_on_the_pull_request_checkout(self) -> None:
         """A post-checkout hook runs inside the new worktree, where it could run
         the pull request's own code (npm install, lefthook…)."""

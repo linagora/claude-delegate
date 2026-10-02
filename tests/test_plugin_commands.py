@@ -91,6 +91,7 @@ class PluginCommandsTest(unittest.TestCase):
         )
         self.assertIn("git show", body)
         self.assertIn("« Tête »", body)
+        self.assertIn("« Fichiers non relus »", body)
         self.assertIn("Ne publie rien", body)
 
     def test_handoff_writes_a_dated_brief_without_shell_and_points_to_a_spec_session(self) -> None:

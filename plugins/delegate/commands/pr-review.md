@@ -13,4 +13,5 @@ Le texte ci-dessus est le rapport d'un relecteur externe : Claude, dans une sess
 2. Si la sortie indique que la commande est passée en arrière-plan, réponds seulement « Revue en cours. » et arrête-toi. Quand la notification de fin arrive, lis le fichier de sortie qu'elle indique, puis reprends à l'étape 3.
 3. Pour chaque point (F1, F2…), vérifie-le dans le code de la pull request, à la révision de la ligne « Tête » de l'en-tête : lis les fichiers avec `git show <tête>:<chemin>`. Ne fais aucun checkout et ne touche ni à ma branche, ni à mon arbre de travail. Classe chaque point : **confirmé**, **faux positif** ou **à discuter**, avec une justification d'une ligne.
 4. Résume le verdict du relecteur et dis si tu le partages après ta vérification. Liste ensuite les changements à demander à l'auteur, en commençant par les points confirmés les plus graves.
-5. Ne publie rien sur GitHub, ni commentaire, ni revue, ni approbation : je décide moi-même de ce que je publie. Ne modifie aucun fichier.
+5. Si la ligne « Fichiers non relus » de l'en-tête nomme des fichiers, rappelle-moi de les relire moi-même : le relecteur n'a pas pu les lire, car ils peuvent contenir des secrets.
+6. Ne publie rien sur GitHub, ni commentaire, ni revue, ni approbation : je décide moi-même de ce que je publie. Ne modifie aucun fichier.

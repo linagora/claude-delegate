@@ -53,6 +53,7 @@ def pr_subject(ctx: PullRequestContext) -> Subject:
             ("Pull request", f"#{pr.number} {pr.url}"),
             ("Branche cible", pr.base),
             ("Tête", _short(pr.head)),
+            ("Fichiers non relus", ", ".join(ctx.unreviewed) or "aucun"),
         ],
         fields={
             "pr_number": pr.number,
@@ -61,6 +62,7 @@ def pr_subject(ctx: PullRequestContext) -> Subject:
             "base_revision": ctx.base_revision,
             "merge_base": ctx.merge_base,
             "head": pr.head,
+            "unreviewed_files": ctx.unreviewed,
         },
     )
 

@@ -9,13 +9,15 @@ import tempfile
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterator, Optional, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple
 
 from . import conventions, forge, policy
 from .errors import EXIT_PREPARATION, DelegateError
 
 #: Denied files stay out of the diff too, since the reviewer may not read them.
 _DENIED = [f":(exclude,glob){path}" for path in policy.DENIED_PATHS]
+#: The same files, to name those a change touches.
+_ONLY_DENIED = [f":(glob){path}" for path in policy.DENIED_PATHS]
 
 #: Beyond this (about 250k tokens), a review costs too much to be useful.
 MAX_DIFF_CHARS = 1_000_000
@@ -55,6 +57,9 @@ class PullRequestContext:
     base_revision: str
     merge_base: str
     diff: str
+    #: Changed files the reviewer may neither read nor see in the diff, as
+    #: they may hold secrets: a human has to review them.
+    unreviewed: List[str]
     #: The root CLAUDE.md of the target branch, never from the pull request.
     conventions: Optional[str]
 
@@ -66,6 +71,7 @@ class PullRequestContext:
             f"URL : {pr.url}\n"
             f"Branche cible : {pr.base}\n"
             f"Tête : {pr.head}\n"
+            f"Fichiers non relus : {', '.join(self.unreviewed) or 'aucun'}\n"
             "\n--- Début de la description de la pull request ---\n"
             f"{pr.body.strip() or '(aucune description)'}\n"
             "--- Fin de la description de la pull request ---\n"
@@ -120,6 +126,7 @@ def pull_request_context(cwd: Path, number: int) -> PullRequestContext:
         base_revision=base_revision,
         merge_base=merge_base,
         diff=_reviewable_diff(root, merge_base, head, f"la pull request #{number} ne change rien à {pr.base}"),
+        unreviewed=_unreviewed_changes(root, merge_base, head),
         conventions=trusted_conventions(root, base_revision),
     )
 
@@ -183,6 +190,13 @@ def _reviewable_diff(root: Path, start: str, end: str, unchanged: str) -> str:
     files; `unchanged` says why there is nothing to review when it is empty."""
     diff = git(root, "diff", "--no-color", "--no-ext-diff", start, end, "--", ".", *_DENIED, strip=False)
     if not diff.strip():
+        unreviewed = _unreviewed_changes(root, start, end)
+        if unreviewed:
+            raise DelegateError(
+                f"rien à relire : seuls changent des fichiers exclus de la revue ({', '.join(unreviewed)}), "
+                "relis-les toi-même",
+                EXIT_PREPARATION,
+            )
         raise DelegateError(f"rien à relire : {unchanged}", EXIT_PREPARATION)
     if len(diff) > MAX_DIFF_CHARS:
         size, limit = (f"{n:,}".replace(",", " ") for n in (len(diff), MAX_DIFF_CHARS))
@@ -190,6 +204,12 @@ def _reviewable_diff(root: Path, start: str, end: str, unchanged: str) -> str:
             f"diff trop volumineux pour une revue : {size} caractères (maximum {limit})", EXIT_PREPARATION
         )
     return diff
+
+
+def _unreviewed_changes(root: Path, start: str, end: str) -> List[str]:
+    """Files changed from `start` to `end` that the reviewer may not read."""
+    names = git(root, "diff", "--name-only", "-z", start, end, "--", *_ONLY_DENIED, strip=False)
+    return [name for name in names.split("\0") if name]
 
 
 def _fetch(root: Path, ref: str) -> str:

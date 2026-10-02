@@ -88,6 +88,7 @@ La commande relit une pull request GitHub sur son propre code, et non sur ta bra
 - git récupère la branche cible et la tête de la pull request (`pull/<numéro>/head`) sans déplacer aucune référence de ton dépôt. Ta branche, ton index et ton arbre de travail ne changent pas non plus.
 - Le relecteur lit la pull request dans un worktree détaché et jetable, créé hors du dépôt sans exécuter aucun hook git. Le CLI en retire d'abord tous les `CLAUDE.md`, `CLAUDE.local.md`, `.claude/` et `.mcp.json`, quelle que soit leur casse : la configuration apportée par la pull request n'atteint jamais le relecteur. Le worktree est supprimé à la fin, même en cas d'échec ou d'interruption.
 - Le relecteur reçoit le titre, la description et le diff depuis le merge-base avec la branche cible. Ses conventions sont celles de la branche cible, jamais celles de la pull request : une modification de `CLAUDE.md` est relue comme du code.
+- Les fichiers `.env*` et `.claude/settings*.json` restent hors de la revue, car ils peuvent contenir des secrets. Ceux que la pull request modifie sont nommés dans l'en-tête du rapport, à la ligne « Fichiers non relus » : relis-les toi-même.
 - Le rapport donne un verdict, APPROVE ou REQUEST_CHANGES, justifié en une phrase. Son en-tête indique le numéro et l'URL de la pull request, sa branche cible et la tête relue.
 
 DeepSeek vérifie ensuite chaque point à la tête relue, avec `git show <tête>:<chemin>`, sans checkout. Rien n'est publié sur GitHub : c'est toi qui décides de ce que tu publies.
@@ -99,7 +100,7 @@ La revue ne démarre pas, avec le code de sortie 3, dans ces cas :
 - `origin` n'est pas sur `github.com` ;
 - `gh` est absent, ou ne peut pas lire la pull request ;
 - la pull request a changé pendant la préparation : relance alors la commande ;
-- la pull request n'a aucun ancêtre commun avec sa branche cible, ne change rien, ou son diff dépasse 1 000 000 caractères.
+- la pull request n'a aucun ancêtre commun avec sa branche cible, ne change que des fichiers exclus de la revue ou rien du tout, ou son diff dépasse 1 000 000 caractères.
 
 ### Codes de sortie
 
