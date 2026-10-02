@@ -54,18 +54,24 @@ def _hostile_review(base: Optional[str], model: str) -> int:
         "Revue hostile du diff fourni sur l'entrée standard.",
         model=model,
     )
+    review = interpret.read_review(done)
+    return _publish(archive.repo_key(ctx.root, ctx.origin_url), report.hostile_subject(ctx), execution, review)
+
+
+def _publish(repo: str, subject: report.Subject, execution: delegate.Execution, review: interpret.Review) -> int:
+    """Archive the report, then print its path and its Markdown for the session."""
     created_at = datetime.now(timezone.utc)
-    hostile = report.HostileReport(
-        id=archive.new_id(report.HostileReport.KIND, created_at),
+    reviewed = report.Report(
+        id=archive.new_id(subject.kind, created_at),
         created_at=created_at,
-        repo=archive.repo_key(ctx.root, ctx.origin_url),
-        context=ctx,
+        repo=repo,
+        subject=subject,
         execution=execution,
-        review=interpret.read_review(done),
+        review=review,
     )
-    markdown = hostile.markdown()
+    markdown = reviewed.markdown()
     try:
-        path = archive.save(archive.state_dir() / hostile.repo, hostile.id, markdown, hostile.companion())
+        path = archive.save(archive.state_dir() / repo, reviewed.id, markdown, reviewed.companion())
     except OSError as error:
         raise DelegateError(f"impossible d'archiver le rapport : {error}") from None
     sys.stdout.write(f"Rapport : {path}\n\n{markdown}")

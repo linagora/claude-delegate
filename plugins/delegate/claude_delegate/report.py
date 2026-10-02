@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import datetime
-from typing import Any, ClassVar, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from . import __version__
 from .delegate import Execution
@@ -14,29 +14,51 @@ from .schemas import SEVERITIES
 
 
 @dataclass(frozen=True)
-class HostileReport:
-    KIND: ClassVar[str] = "hostile"
-    TITLE: ClassVar[str] = "Revue hostile"
+class Subject:
+    """What a report is about: its kind and title, and its own header rows and
+    companion fields."""
 
+    kind: str
+    title: str
+    rows: List[Tuple[str, str]]
+    fields: Dict[str, Any]
+
+
+def hostile_subject(ctx: HostileContext) -> Subject:
+    return Subject(
+        kind="hostile",
+        title="Revue hostile",
+        rows=[
+            ("Base", f"{ctx.base} (merge-base {_short(ctx.merge_base)})"),
+            ("Révision relue", _short(ctx.reviewed_revision)),
+        ],
+        fields={
+            "base": ctx.base,
+            "merge_base": ctx.merge_base,
+            "reviewed_revision": ctx.reviewed_revision,
+        },
+    )
+
+
+@dataclass(frozen=True)
+class Report:
     id: str
     created_at: datetime
     repo: str
-    context: HostileContext
+    subject: Subject
     execution: Execution
     review: Review
 
     def markdown(self) -> str:
-        return _render(self.TITLE, self._header(), self.review)
+        return _render(self.subject.title, self._header(), self.review)
 
     def companion(self) -> Dict[str, Any]:
         return {
             "id": self.id,
-            "type": self.KIND,
+            "type": self.subject.kind,
             "created_at": self.created_at.isoformat(),
             "repo": self.repo,
-            "base": self.context.base,
-            "merge_base": self.context.merge_base,
-            "reviewed_revision": self.context.reviewed_revision,
+            **self.subject.fields,
             "requested_model": self.execution.requested_model,
             "model": self.review.model,
             "effort": self.execution.effort,
@@ -54,11 +76,10 @@ class HostileReport:
     def _header(self) -> List[Tuple[str, str]]:
         return [
             ("Identifiant", self.id),
-            ("Type", self.TITLE.lower()),
+            ("Type", self.subject.title.lower()),
             ("Date (UTC)", f"{self.created_at:%Y-%m-%d %H:%M:%S}"),
             ("Dépôt", self.repo),
-            ("Base", f"{self.context.base} (merge-base {_short(self.context.merge_base)})"),
-            ("Révision relue", _short(self.context.reviewed_revision)),
+            *self.subject.rows,
             ("Modèle", self.review.model),
             ("Effort", self.execution.effort),
             ("Tours", _unknown_if_none(self.review.num_turns, "inconnu")),
