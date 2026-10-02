@@ -7,6 +7,8 @@ import posixpath
 import re
 from typing import Callable, Optional, Tuple
 
+from . import policy
+
 #: Reads a file of the trusted revision: its text, or None when it is absent.
 Reader = Callable[[str], Optional[str]]
 
@@ -39,8 +41,9 @@ def _with_imports(read: Reader, path: str, chain: Tuple[str, ...]) -> Optional[s
 
 def _imported_path(importer: str, reference: str) -> Optional[str]:
     """A path inside the repository, relative to the importing file. Home and
-    absolute paths are never followed: they are not part of the revision."""
+    absolute paths are never followed: they are not part of the revision. Nor
+    are files the reviewer may not read, whatever the channel."""
     if reference.startswith(("~", "/")):
         return None
     path = posixpath.normpath(posixpath.join(posixpath.dirname(importer), reference))
-    return None if path.startswith("..") else path
+    return None if path.startswith("..") or policy.is_denied(path) else path

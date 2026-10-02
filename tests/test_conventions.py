@@ -58,6 +58,20 @@ class ConventionsTest(FeatureBranchTestCase):
         self.assertIn("REGLE_DES_AGENTS", prompt)
         self.assertNotIn("REGLE_MODIFIEE", prompt)
 
+    def test_imports_never_bring_in_files_the_reviewer_may_not_read(self) -> None:
+        self.on_main(
+            {
+                "CLAUDE.md": "@.env\n@config/.env.local\n@.claude/settings.local.json\n",
+                ".env": "TOKEN=SECRET_VALUE\n",
+                "config/.env.local": "PASSWORD=SECRET_VALUE\n",
+                ".claude/settings.local.json": '{"token": "SECRET_VALUE"}\n',
+            }
+        )
+
+        prompt = self.system_prompt()
+
+        self.assertNotIn("SECRET_VALUE", prompt)
+
     def test_the_task_and_its_conventions_travel_in_one_prompt_file(self) -> None:
         self.on_main({"CLAUDE.md": "CONVENTION_DE_BASE\n"})
 
