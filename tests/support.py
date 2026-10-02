@@ -98,6 +98,14 @@ def option(argv: List[str], name: str) -> str:
     return argv[argv.index(name) + 1]
 
 
+def recorded_calls(directory: Path) -> List[Any]:
+    """The calls a fake recorded in `directory`, oldest first."""
+    log = directory / "calls.jsonl"
+    if not log.exists():
+        return []
+    return [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+
+
 def report_path(stdout: str) -> Path:
     """The archived report announced on the first line of the CLI output."""
     first_line = stdout.partition("\n")[0]
@@ -147,10 +155,7 @@ class FakeClaude:
         (self.directory / "reply.json").write_text(json.dumps({"queue": replies}), encoding="utf-8")
 
     def calls(self) -> List[Dict[str, Any]]:
-        log = self.directory / "calls.jsonl"
-        if not log.exists():
-            return []
-        return [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+        return recorded_calls(self.directory)
 
     def last_call(self) -> Dict[str, Any]:
         calls = self.calls()
@@ -244,7 +249,7 @@ class FeatureBranchTestCase(unittest.TestCase):
         self.sb.commit_all("feature change")
 
 
-_FAKE_FORGE_SCRIPT = '''#!{python}
+_FAKE_GH_SCRIPT = '''#!{python}
 import json, sys
 from pathlib import Path
 
@@ -258,14 +263,14 @@ sys.exit(reply["exit_code"])
 '''
 
 
-class FakeForgeCli:
-    """Stand-in for `gh` or `glab`, placed first on the PATH."""
+class FakeGh:
+    """Stand-in for `gh`, placed first on the PATH: records each call, replies with a canned result."""
 
-    def __init__(self, directory: Path, name: str) -> None:
+    def __init__(self, directory: Path) -> None:
         directory.mkdir(parents=True)
         self.directory = directory
-        path = directory / name
-        path.write_text(_FAKE_FORGE_SCRIPT.format(python=sys.executable, directory=str(directory)), encoding="utf-8")
+        path = directory / "gh"
+        path.write_text(_FAKE_GH_SCRIPT.format(python=sys.executable, directory=str(directory)), encoding="utf-8")
         path.chmod(0o755)
         self.reply({})
 
@@ -280,10 +285,7 @@ class FakeForgeCli:
         (self.directory / "reply.json").write_text(json.dumps(reply), encoding="utf-8")
 
     def calls(self) -> List[List[str]]:
-        log = self.directory / "calls.jsonl"
-        if not log.exists():
-            return []
-        return [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+        return recorded_calls(self.directory)
 
 
 class PullRequestTestCase(unittest.TestCase):
@@ -303,14 +305,13 @@ class PullRequestTestCase(unittest.TestCase):
         self.sb.git("push", "-q", "origin", "main")
         self.contributor = self.sb.root / "contributor"
         self.sb.git("clone", "-q", str(self.origin), str(self.contributor), cwd=self.sb.root)
-        self.head = self.push_pull_request({"app.py": "def div(a, b):\n    return a / b if b else PR_CHANGE\n"})
-        self.gh = FakeForgeCli(self.sb.root / "forge-bin", "gh")
-        self.gh.reply(self.metadata())
+        self.gh = FakeGh(self.sb.root / "gh-bin")
+        self.update_pull_request({"app.py": "def div(a, b):\n    return a / b if b else PR_CHANGE\n"})
 
-    def push_pull_request(self, files: Dict[str, str]) -> str:
+    def update_pull_request(self, files: Dict[str, str]) -> None:
         """Commit `files` on top of origin's main in the contributor's clone and
         publish them as refs/pull/7/head only, as from a fork: the repository
-        under review only gets them by fetching. Returns the PR head."""
+        under review only gets them by fetching. gh then describes that head."""
         clone = self.contributor
         self.sb.git("fetch", "-q", "origin", cwd=clone)
         self.sb.git("switch", "-q", "--detach", "origin/main", cwd=clone)
@@ -321,7 +322,8 @@ class PullRequestTestCase(unittest.TestCase):
         self.sb.git("add", "-A", cwd=clone)
         self.sb.git("commit", "-q", "-m", "pull request work", cwd=clone)
         self.sb.git("push", "-q", "-f", "origin", f"HEAD:refs/pull/{self.NUMBER}/head", cwd=clone)
-        return self.sb.git("rev-parse", "HEAD", cwd=clone)
+        self.head = self.sb.git("rev-parse", "HEAD", cwd=clone)
+        self.gh.reply(self.metadata())
 
     def metadata(self, **fields: Any) -> Dict[str, Any]:
         return {

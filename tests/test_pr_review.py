@@ -79,7 +79,7 @@ class PullRequestReviewTest(PullRequestTestCase):
         )
 
     def test_the_pull_request_configuration_never_reaches_the_reviewer(self) -> None:
-        self.head = self.push_pull_request(
+        self.update_pull_request(
             {
                 "CLAUDE.md": "INSTRUCTION_DE_LA_PR\n",
                 "CLAUDE.local.md": "local\n",
@@ -91,7 +91,6 @@ class PullRequestReviewTest(PullRequestTestCase):
                 ".Claude/agents/espion.md": "agent\n",
             }
         )
-        self.gh.reply(self.metadata())
 
         self.run_pr()
 
@@ -128,8 +127,7 @@ class PullRequestReviewTest(PullRequestTestCase):
         self.sb.write("CLAUDE.md", "CONVENTION_CIBLE\n")
         self.sb.commit_all("conventions")
         self.sb.git("push", "-q", "origin", "main")
-        self.head = self.push_pull_request({"CLAUDE.md": "CONVENTION_DE_LA_PR\n"})
-        self.gh.reply(self.metadata())
+        self.update_pull_request({"CLAUDE.md": "CONVENTION_DE_LA_PR\n"})
 
         self.run_pr()
 
@@ -194,8 +192,7 @@ class PullRequestReviewTest(PullRequestTestCase):
 
     def test_a_force_pushed_pull_request_can_be_reviewed_again(self) -> None:
         self.run_pr()
-        self.head = self.push_pull_request({"app.py": "AFTER_FORCE_PUSH = 1\n"})
-        self.gh.reply(self.metadata())
+        self.update_pull_request({"app.py": "AFTER_FORCE_PUSH = 1\n"})
 
         result = self.run_pr()
 
