@@ -101,13 +101,13 @@ def _structured_output(payload: Dict[str, Any], honours: Callable[[Any], bool]) 
     return structured
 
 
-def _review(payload: Dict[str, Any], structured: Dict[str, Any]) -> Review:
+def _review(payload: Dict[str, Any], structured: Dict[str, Any], first_number: int = 1) -> Review:
     cost = payload.get("total_cost_usd")
     duration = payload.get("duration_ms")
     refused = refusals(payload)
     return Review(
         summary=structured["summary"],
-        findings=_numbered(structured["findings"]),
+        findings=_numbered(structured["findings"], first_number),
         model=_model(payload),
         num_turns=_int_or_none(payload.get("num_turns")),
         cost_usd=float(cost) if isinstance(cost, (int, float)) else None,
@@ -168,9 +168,10 @@ def _raise_on_failure(payload: Dict[str, Any], returncode: int) -> None:
     raise DelegateError(f"la revue a échoué : {_excerpt(reason)}")
 
 
-def _numbered(findings: List[Dict[str, Any]]) -> List[Finding]:
+def _numbered(findings: List[Dict[str, Any]], first_number: int) -> List[Finding]:
     """Most severe first (model order kept within a severity), numbered F1, F2…
-    Only the schema fields are kept: an identifier proposed by the model is dropped."""
+    from `first_number`. Only the schema fields are kept: an identifier proposed
+    by the model is dropped."""
     ordered = sorted(findings, key=lambda f: schemas.SEVERITIES.index(f["severity"]))
     return [
         Finding(
@@ -182,7 +183,7 @@ def _numbered(findings: List[Dict[str, Any]]) -> List[Finding]:
             failure_scenario=f["failure_scenario"],
             fix=f["fix"],
         )
-        for n, f in enumerate(ordered, start=1)
+        for n, f in enumerate(ordered, start=first_number)
     ]
 
 
