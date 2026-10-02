@@ -1,0 +1,15 @@
+{
+  "name": "claude-delegate",
+  "owner": {
+    "name": "Linagora",
+    "url": "https://github.com/linagora"
+  },
+  "description": "Délégation des revues de code d'une session Claude Code sur DeepSeek vers les modèles Anthropic",
+  "plugins": [
+    {
+      "name": "delegate",
+      "source": "./plugins/delegate",
+      "description": "Revues de code déléguées à Claude Opus depuis une session DeepSeek, dans une session isolée en lecture seule"
+    }
+  ]
+}
