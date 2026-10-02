@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict, List
 
+from . import policy
 from .errors import DelegateError
 
 #: The plugin's prompts. ${CLAUDE_PLUGIN_ROOT} is not exported to the shell, so
@@ -15,7 +16,7 @@ from .errors import DelegateError
 PROMPTS = Path(__file__).resolve().parent.parent / "prompts"
 
 #: Reads the reviewer must never perform, even inside the reviewed tree.
-DENIED_READS = ["Read(**/.env)", "Read(**/.env.*)", "Read(**/.claude/settings*.json)"]
+DENIED_READS = [f"Read({path})" for path in policy.DENIED_PATHS]
 
 #: The only variables the reviewer inherits (plus LC_*). Anything else, such as
 #: the DeepSeek ANTHROPIC_* settings, CLAUDE_CODE_* tuning or tokens, stays out.

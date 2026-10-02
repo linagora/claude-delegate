@@ -10,7 +10,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
+from . import policy
 from .errors import EXIT_PREPARATION, DelegateError
+
+#: Denied files stay out of the diff too, since the reviewer may not read them.
+_DENIED = [f":(exclude,glob){path}" for path in policy.DENIED_PATHS]
 
 #: Identity of the technical commit that freezes the reviewed revision, so that
 #: building it never depends on the user's git configuration.
@@ -46,7 +50,9 @@ def hostile_context(cwd: Path, base: Optional[str]) -> HostileContext:
     if merge_base is None:
         raise DelegateError(f"aucun ancêtre commun entre {base} et HEAD", EXIT_PREPARATION)
     snapshot = _snapshot(root)
-    diff = git(root, "diff", "--no-color", "--no-ext-diff", merge_base, snapshot, strip=False)
+    diff = git(
+        root, "diff", "--no-color", "--no-ext-diff", merge_base, snapshot, "--", ".", *_DENIED, strip=False
+    )
     if not diff.strip():
         raise DelegateError(f"rien à relire : aucun changement depuis {base}", EXIT_PREPARATION)
     return HostileContext(

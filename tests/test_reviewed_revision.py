@@ -25,6 +25,18 @@ class ReviewedRevisionTest(FeatureBranchTestCase):
         self.assertIn("UNTRACKED_CHANGE", reviewed)
         self.assertNotIn("IGNORED_CONTENT", reviewed)
 
+    def test_files_the_reviewer_may_not_read_stay_out_of_the_diff(self) -> None:
+        self.sb.write(".env", "API_TOKEN=SECRET_VALUE\n")
+        self.sb.write("config/.env.production", "DB_PASSWORD=SECRET_VALUE\n")
+        self.sb.write(".claude/settings.local.json", '{"env": {"TOKEN": "SECRET_VALUE"}}\n')
+
+        result = self.sb.run("hostile-review", "main")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        reviewed = self.sb.fake.last_call()["stdin"]
+        self.assertNotIn("SECRET_VALUE", reviewed)
+        self.assertIn("a / b if b else 0", reviewed)
+
     def test_a_file_that_is_not_utf8_is_reviewed_without_crashing(self) -> None:
         (self.sb.repo / "latin1.txt").write_bytes("prix = 'café'\n".encode("latin-1"))
 
