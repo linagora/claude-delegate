@@ -4,7 +4,7 @@ import json
 import unittest
 from typing import Any, Dict
 
-from tests.support import FeatureBranchTestCase, success
+from tests.support import SAMPLE_FINDING, FeatureBranchTestCase, success
 
 QUOTA_EXHAUSTED = 4
 REVIEW_INCOMPLETE = 5
@@ -63,9 +63,11 @@ class FailureTest(FeatureBranchTestCase):
 
     def test_a_missing_or_off_schema_structured_output_is_an_invalid_output(self) -> None:
         missing = {k: v for k, v in success().items() if k != "structured_output"}
+        without_line = {k: v for k, v in SAMPLE_FINDING.items() if k != "line"}
         for name, payload, exit_code in [
             ("absente", missing, 0),
-            ("non conforme", success(findings=[{"severity": "critique"}]), 0),
+            ("gravité inconnue", success(findings=[{**SAMPLE_FINDING, "severity": "critique"}]), 0),
+            ("ligne absente", success(findings=[without_line]), 0),
             ("tentatives épuisées", failed(subtype="error_max_structured_output_retries"), 1),
         ]:
             with self.subTest(name):

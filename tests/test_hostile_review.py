@@ -152,21 +152,6 @@ class HostileReviewTest(FeatureBranchTestCase):
         self.assertIn("### F2 · app.py:2", report)
         self.assertNotIn("BUG-7", report)
 
-    def test_structured_output_that_breaks_the_schema_is_rejected(self) -> None:
-        without_line = {k: v for k, v in SAMPLE_FINDING.items() if k != "line"}
-        for name, finding in [
-            ("ligne absente", without_line),
-            ("gravité inconnue", {**SAMPLE_FINDING, "severity": "critique"}),
-        ]:
-            with self.subTest(name):
-                self.sb.fake.reply(success(findings=[finding]))
-
-                result = self.sb.run("hostile-review", "main")
-
-                self.assertNotEqual(result.returncode, 0)
-                self.assertTrue(result.stderr.startswith("claude-delegate : "), result.stderr)
-                self.assertEqual(list(self.sb.state.rglob("*.md")), [])
-
     def test_report_is_archived_outside_the_repository_and_its_path_comes_first(self) -> None:
         result = self.sb.run("hostile-review", "main")
 
@@ -318,30 +303,6 @@ class HostileReviewTest(FeatureBranchTestCase):
         result = self.sb.run("hostile-review")
 
         self.assertIn("| Base | main (merge-base", result.stdout)
-
-    def test_a_failed_review_is_reported_on_stderr_and_archives_nothing(self) -> None:
-        quota = {
-            **success(),
-            "is_error": True,
-            "terminal_reason": "api_error",
-            "result": "You've hit your weekly limit · resets Oct 6 at 10am (Europe/Paris)",
-        }
-        no_structured_output = {k: v for k, v in success().items() if k != "structured_output"}
-        for name, reply, exit_code in [
-            ("erreur signalée", json.dumps(quota), 1),
-            ("sortie illisible", "Error: something broke", 1),
-            ("sans sortie structurée", json.dumps(no_structured_output), 0),
-        ]:
-            with self.subTest(name):
-                self.sb.fake.reply_raw(reply, exit_code)
-
-                result = self.sb.run("hostile-review", "main")
-
-                self.assertNotEqual(result.returncode, 0)
-                self.assertTrue(result.stderr.startswith("claude-delegate : "), result.stderr)
-                self.assertNotIn("Traceback", result.stderr)
-                self.assertEqual(result.stdout, "")
-                self.assertEqual(list(self.sb.state.rglob("*.md")), [])
 
 
 if __name__ == "__main__":
