@@ -1,5 +1,6 @@
 """What the reviewer reads, prepared from git: the diff to review, the trusted
-conventions and, for a pull request, a throwaway worktree of its code."""
+conventions, what changed since the report a recheck checks and, for a pull
+request, a throwaway worktree of its code."""
 
 from __future__ import annotations
 

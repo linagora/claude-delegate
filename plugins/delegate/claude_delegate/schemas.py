@@ -1,7 +1,8 @@
 """The structured-output contract with the delegated reviewer (passed via --json-schema).
 
-Finding identifiers are not part of the contract: the model invents its own,
-so the CLI numbers findings itself (F1, F2…).
+Finding identifiers are not part of a finding: the model would invent its
+own, so the CLI numbers findings itself (F1, F2…). A recheck then rules on
+findings under these identifiers.
 """
 
 from __future__ import annotations

@@ -1,4 +1,5 @@
-"""Where reports live: outside the repository, one directory per repository."""
+"""Where reports live, outside the repository with one directory per
+repository, and how a recheck finds them again."""
 
 from __future__ import annotations
 
