@@ -124,6 +124,38 @@ class ConventionsTest(FeatureBranchTestCase):
         self.assertIn("```\n@AGENTS.md\n```", section)
         self.assertNotIn("REGLE_DES_AGENTS", section)
 
+    def test_conventions_are_bounded_in_size(self) -> None:
+        self.on_main({"CLAUDE.md": "règle " * 25_000})
+
+        section = self.system_prompt().split(SECTION, 1)[1]
+
+        self.assertIn("(conventions tronquées à 100 000 caractères)", section)
+        self.assertLess(len(section), 101_000)
+
+    def test_imports_are_bounded_in_number(self) -> None:
+        files = {f"f{n}.md": f"CONTENU_{n}\n" for n in range(25)}
+        files["CLAUDE.md"] = "".join(f"@f{n}.md\n" for n in range(25))
+        self.on_main(files)
+
+        section = self.system_prompt().split(SECTION, 1)[1]
+
+        self.assertIn("CONTENU_19", section)
+        self.assertNotIn("CONTENU_20", section)
+        self.assertEqual(section.count("(import ignoré : "), 5)
+
+    def test_a_binary_import_is_not_injected(self) -> None:
+        self.on_main({"CLAUDE.md": "@image.bin\n"})
+        self.sb.git("switch", "-q", "main")
+        (self.sb.repo / "image.bin").write_bytes(b"\x00\x01PNG")
+        self.sb.commit_all("binary")
+        self.sb.git("switch", "-q", "feature")
+        self.sb.git("rebase", "-q", "main")
+
+        prompt = self.system_prompt()
+
+        self.assertIn("(import ignoré : image.bin)", prompt)
+        self.assertNotIn("\x00", prompt)
+
     def test_the_task_and_its_conventions_travel_in_one_prompt_file(self) -> None:
         self.on_main({"CLAUDE.md": "CONVENTION_DE_BASE\n"})
 
