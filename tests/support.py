@@ -93,6 +93,10 @@ def success(
     }
 
 
+def option(argv: List[str], name: str) -> str:
+    """The value given to a command-line option."""
+    return argv[argv.index(name) + 1]
+
 def report_path(stdout: str) -> Path:
     """The archived report announced on the first line of the CLI output."""
     first_line = stdout.partition("\n")[0]

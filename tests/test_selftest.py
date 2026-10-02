@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from typing import Any, Dict, Sequence
 
-from tests.support import Sandbox, success
+from tests.support import Sandbox, option, success
 
 SELFTEST_FAILED = 8
 QUOTA_EXHAUSTED = 4
@@ -64,10 +64,10 @@ class SelftestTest(unittest.TestCase):
         argv = call["argv"]
         for flag in ["--restricted", "--strict-mcp-config", "--no-session-persistence"]:
             self.assertIn(flag, argv)
-        self.assertEqual(argv[argv.index("--tools") + 1], "Read,Grep,Glob")
-        self.assertEqual(argv[argv.index("--permission-mode") + 1], "dontAsk")
-        self.assertEqual(argv[argv.index("--model") + 1], "haiku")
-        self.assertLessEqual(float(argv[argv.index("--max-budget-usd") + 1]), 0.1)
+        self.assertEqual(option(argv, "--tools"), "Read,Grep,Glob")
+        self.assertEqual(option(argv, "--permission-mode"), "dontAsk")
+        self.assertEqual(option(argv, "--model"), "haiku")
+        self.assertLessEqual(float(option(argv, "--max-budget-usd")), 0.1)
         self.assertEqual(call["env"]["CLAUDE_CONFIG_DIR"], str(self.sb.home / ".claude-anthropic"))
         self.assertIn("CLAUDE.md", call["cwd_listing"])
         self.assertIn(".mcp.json", call["cwd_listing"])
