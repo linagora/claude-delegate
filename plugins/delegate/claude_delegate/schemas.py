@@ -42,9 +42,9 @@ def is_review(value: Any) -> bool:
 
 
 def _is_finding(value: Any) -> bool:
-    if not isinstance(value, dict) or value.get("severity") not in SEVERITIES:
+    if not isinstance(value, dict) or value.get("severity") not in SEVERITIES or "line" not in value:
         return False
-    line = value.get("line")
+    line = value["line"]
     if line is not None and (not isinstance(line, int) or isinstance(line, bool)):
         return False
     return all(isinstance(value.get(key), str) for key in ("file", "problem", "failure_scenario", "fix"))

@@ -157,6 +157,21 @@ class HostileReviewTest(unittest.TestCase):
         self.assertIn("### F2 · app.py:2", report)
         self.assertNotIn("BUG-7", report)
 
+    def test_structured_output_that_breaks_the_schema_is_rejected(self) -> None:
+        without_line = {k: v for k, v in FINDING.items() if k != "line"}
+        for name, finding in [
+            ("ligne absente", without_line),
+            ("gravité inconnue", {**FINDING, "severity": "critique"}),
+        ]:
+            with self.subTest(name):
+                self.sb.fake.reply(success(findings=[finding]))
+
+                result = self.sb.run("hostile-review", "main")
+
+                self.assertNotEqual(result.returncode, 0)
+                self.assertTrue(result.stderr.startswith("claude-delegate : "), result.stderr)
+                self.assertEqual(list(self.sb.state.rglob("*.md")), [])
+
     def test_report_is_archived_outside_the_repository_and_its_path_comes_first(self) -> None:
         result = self.sb.run("hostile-review", "main")
 
