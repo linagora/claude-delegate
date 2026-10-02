@@ -109,18 +109,7 @@ def _parse(record: Dict[str, Any], companion: Path) -> Original:
         base=text("base"),
         reviewed_revision=text("reviewed_revision"),
         requested_model=text("requested_model"),
-        findings=[
-            Finding(
-                id=f["id"],
-                severity=f["severity"],
-                file=f["file"],
-                line=f["line"],
-                problem=f["problem"],
-                failure_scenario=f["failure_scenario"],
-                fix=f["fix"],
-            )
-            for f in findings
-        ],
+        findings=[Finding.from_record(finding, finding["id"]) for finding in findings],
     )
 
 

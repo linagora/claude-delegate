@@ -46,6 +46,19 @@ class Finding:
     def location(self) -> str:
         return self.file if self.line is None else f"{self.file}:{self.line}"
 
+    @classmethod
+    def from_record(cls, fields: Dict[str, Any], identifier: str) -> "Finding":
+        """A finding from the fields FINDING describes, under `identifier`."""
+        return cls(
+            id=identifier,
+            severity=fields["severity"],
+            file=fields["file"],
+            line=fields["line"],
+            problem=fields["problem"],
+            failure_scenario=fields["failure_scenario"],
+            fix=fields["fix"],
+        )
+
 
 @dataclass(frozen=True)
 class Verdict:
@@ -196,18 +209,7 @@ def _numbered(findings: List[Dict[str, Any]], first_number: int) -> List[Finding
     from `first_number`. Only the schema fields are kept: an identifier proposed
     by the model is dropped."""
     ordered = sorted(findings, key=lambda f: schemas.SEVERITIES.index(f["severity"]))
-    return [
-        Finding(
-            id=f"F{n}",
-            severity=f["severity"],
-            file=f["file"],
-            line=f["line"],
-            problem=f["problem"],
-            failure_scenario=f["failure_scenario"],
-            fix=f["fix"],
-        )
-        for n, f in enumerate(ordered, start=first_number)
-    ]
+    return [Finding.from_record(f, f"F{n}") for n, f in enumerate(ordered, start=first_number)]
 
 
 def _model(payload: Dict[str, Any]) -> str:
