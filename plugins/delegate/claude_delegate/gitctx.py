@@ -260,7 +260,7 @@ def _entry(root: Path, revision: str, path: str) -> Optional[Tuple[str, str]]:
     is absent or is not a file, such as a directory."""
     listed = _run(root, ("ls-tree", "-z", revision, "--", path))
     if listed.returncode != 0:
-        raise _unreadable(path, listed)
+        raise _unreadable(path, revision, listed)
     if not listed.stdout:
         return None
     mode, kind, sha = listed.stdout.split("\0", 1)[0].partition("\t")[0].split()
@@ -268,14 +268,14 @@ def _entry(root: Path, revision: str, path: str) -> Optional[Tuple[str, str]]:
         return None
     blob = _run(root, ("cat-file", "blob", sha))
     if blob.returncode != 0:
-        raise _unreadable(path, blob)
+        raise _unreadable(path, revision, blob)
     return ("link" if mode == "120000" else "file", blob.stdout)
 
 
-def _unreadable(path: str, done: "subprocess.CompletedProcess[str]") -> DelegateError:
+def _unreadable(path: str, revision: str, done: "subprocess.CompletedProcess[str]") -> DelegateError:
     """A conventions file git cannot read: reviewing without it would hide that."""
     return DelegateError(
-        f"conventions illisibles : {path} au merge-base ({done.stderr.strip()})", EXIT_PREPARATION
+        f"conventions illisibles : {path} à la révision {revision[:12]} ({done.stderr.strip()})", EXIT_PREPARATION
     )
 
 

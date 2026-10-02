@@ -179,6 +179,21 @@ class PullRequestReviewTest(PullRequestTestCase):
         self.assertIn("CONVENTION_CIBLE", prompt)
         self.assertNotIn("CONVENTION_DE_LA_PR", prompt)
 
+    def test_unreadable_conventions_of_the_target_branch_stop_the_review(self) -> None:
+        self.sb.write("CLAUDE.md", "CONVENTION_CIBLE\n")
+        self.sb.commit_all("conventions")
+        self.sb.git("push", "-q", "origin", "main")
+        self.update_pull_request({"app.py": "def div(a, b):\n    return a / b if b else PR_CHANGE\n"})
+        blob = self.sb.git("rev-parse", "main:CLAUDE.md")
+        (self.sb.repo / ".git" / "objects" / blob[:2] / blob[2:]).unlink()
+
+        result = self.run_pr()
+
+        self.assertEqual(result.returncode, PREPARATION_FAILURE, result.stderr)
+        target = self.sb.git("rev-parse", "main")
+        self.assertIn(f"conventions illisibles : CLAUDE.md à la révision {target[:12]}", result.stderr)
+        self.assertEqual(self.sb.fake.calls(), [])
+
     def test_the_report_gives_the_verdict_and_identifies_the_pull_request(self) -> None:
         result = self.run_pr()
 
