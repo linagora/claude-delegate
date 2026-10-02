@@ -17,3 +17,7 @@ def hostile_review(conventions: Optional[str]) -> str:
     # replace, not format: the conventions may contain braces.
     section = (PROMPTS / "conventions.md").read_text(encoding="utf-8").replace("{conventions}", conventions.strip())
     return f"{task}\n\n{section}"
+
+
+def selftest() -> str:
+    return (PROMPTS / "selftest.md").read_text(encoding="utf-8")

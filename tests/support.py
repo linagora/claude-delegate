@@ -54,7 +54,12 @@ call = {{
 }}
 with open(here / "calls.jsonl", "a", encoding="utf-8") as f:
     f.write(json.dumps(call) + "\\n")
-reply = json.loads((here / "reply.json").read_text(encoding="utf-8"))
+queue = json.loads((here / "reply.json").read_text(encoding="utf-8"))["queue"]
+reply = queue.pop(0) if len(queue) > 1 else queue[0]
+(here / "reply.json").write_text(json.dumps({{"queue": queue}}), encoding="utf-8")
+for name in reply.get("touch", []):
+    Path(name).parent.mkdir(parents=True, exist_ok=True)
+    Path(name).touch()
 sys.stdout.write(reply["stdout"])
 sys.exit(reply["exit_code"])
 '''
@@ -111,12 +116,20 @@ class FakeClaude:
         else:
             version.write_text(text, encoding="utf-8")
 
-    def reply(self, payload: Dict[str, Any], exit_code: int = 0) -> None:
-        self.reply_raw(json.dumps(payload), exit_code)
+    def reply(self, payload: Dict[str, Any], exit_code: int = 0, touch: Sequence[str] = ()) -> None:
+        """Answer with `payload`; `touch` files (relative to the cwd) are created
+        first, as a reviewer that managed to write would."""
+        self.reply_raw(json.dumps(payload), exit_code, touch)
 
-    def reply_raw(self, stdout: str, exit_code: int = 0) -> None:
-        reply = {"stdout": stdout, "exit_code": exit_code}
-        (self.directory / "reply.json").write_text(json.dumps(reply), encoding="utf-8")
+    def reply_raw(self, stdout: str, exit_code: int = 0, touch: Sequence[str] = ()) -> None:
+        self._queue([{"stdout": stdout, "exit_code": exit_code, "touch": list(touch)}])
+
+    def replies(self, *payloads: Dict[str, Any]) -> None:
+        """Answer successive calls with successive payloads; the last one then repeats."""
+        self._queue([{"stdout": json.dumps(p), "exit_code": 0, "touch": []} for p in payloads])
+
+    def _queue(self, replies: List[Dict[str, Any]]) -> None:
+        (self.directory / "reply.json").write_text(json.dumps({"queue": replies}), encoding="utf-8")
 
     def calls(self) -> List[Dict[str, Any]]:
         log = self.directory / "calls.jsonl"

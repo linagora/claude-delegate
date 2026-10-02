@@ -48,6 +48,7 @@ def launch(
     instruction: str,
     *,
     model: str,
+    budget_usd: float = MAX_BUDGET_USD,
 ) -> Tuple["subprocess.CompletedProcess[str]", Execution]:
     """Run the reviewer in `root` on `task_input`; return its raw result and how it ran."""
     binary = resolve_binary()
@@ -62,7 +63,7 @@ def launch(
             prompt_file = Path(tmp) / "system-prompt.md"
             prompt_file.write_text(system_prompt, encoding="utf-8")
             done = subprocess.run(
-                _command(binary, model, schema, prompt_file, instruction),
+                _command(binary, model, budget_usd, schema, prompt_file, instruction),
                 input=task_input,
                 cwd=root,
                 env=_environment(),
@@ -133,7 +134,7 @@ def _environment() -> Dict[str, str]:
 
 
 def _command(
-    binary: str, model: str, schema: Dict[str, Any], prompt_file: Path, instruction: str
+    binary: str, model: str, budget_usd: float, schema: Dict[str, Any], prompt_file: Path, instruction: str
 ) -> List[str]:
     """The isolation contract, validated against a booby-trapped project (probe V1).
 
@@ -160,7 +161,7 @@ def _command(
         "--max-turns",
         str(MAX_TURNS),
         "--max-budget-usd",
-        str(MAX_BUDGET_USD),
+        f"{budget_usd:g}",
         "--output-format",
         "json",
         "--json-schema",
