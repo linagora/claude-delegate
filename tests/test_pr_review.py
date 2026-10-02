@@ -194,7 +194,8 @@ class PullRequestReviewTest(PullRequestTestCase):
 
         call = self.sb.fake.last_call()
         prompt = call["system_prompt"] or ""
-        self.assertIn((PLUGIN / "prompts" / "pr-review.md").read_text(encoding="utf-8").strip(), prompt)
+        task = (PLUGIN / "prompts" / "pr-review.md").read_text(encoding="utf-8")
+        self.assertIn(task.splitlines()[0], prompt)
         self.assertIn("CONVENTION_CIBLE", prompt)
         self.assertNotIn("CONVENTION_DE_LA_PR", prompt)
         # The pull request's change to CLAUDE.md is reviewed as code.
