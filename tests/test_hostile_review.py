@@ -282,6 +282,15 @@ class HostileReviewTest(FeatureBranchTestCase):
 
         self.assertEqual(report.parent, expected)
 
+    def test_reports_are_filed_under_the_repository_an_insteadof_alias_stands_for(self) -> None:
+        expected = self.sb.state / "claude-delegate" / "github.com" / "linagora" / "claude-delegate"
+        self.sb.git("config", "url.git@github.com:.insteadOf", "gh:")
+        self.sb.git("remote", "add", "origin", "gh:linagora/claude-delegate.git")
+
+        report = report_path(self.sb.run("hostile-review", "main").stdout)
+
+        self.assertEqual(report.parent, expected)
+
     def test_default_base_is_the_default_branch_of_origin(self) -> None:
         origin = self.sb.root / "origin.git"
         self.sb.git("init", "-q", "--bare", "-b", "develop", str(origin), cwd=self.sb.root)

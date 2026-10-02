@@ -153,10 +153,14 @@ def default_base(root: Path) -> str:
 
 
 def origin_url(root: Path) -> Optional[str]:
-    """origin's URL as configured: unlike `git remote get-url`, before any
-    insteadOf rule rewrites it to a mirror or a local path."""
-    urls = _git_or_none(root, "config", "--get-all", "remote.origin.url")
-    return urls.splitlines()[0] if urls else None
+    """origin's URL as git reaches it, which resolves insteadOf aliases such as
+    gh:owner/name. When a rule rewrites it to a local path (a mirror), the URL
+    as configured still names the hosted repository."""
+    reached = _git_or_none(root, "remote", "get-url", "origin")
+    if reached is None or forge.parse_remote(reached) is not None:
+        return reached
+    configured = _git_or_none(root, "config", "--get-all", "remote.origin.url")
+    return configured.splitlines()[0] if configured else reached
 
 
 def git(cwd: Path, *args: str, strip: bool = True, env: Optional[Dict[str, str]] = None) -> str:
