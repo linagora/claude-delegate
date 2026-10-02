@@ -81,7 +81,9 @@ def _snapshot(root: Path) -> str:
         scratch_index = Path(tmp) / "index"
         env = {**os.environ, "GIT_INDEX_FILE": str(scratch_index), **_SNAPSHOT_IDENTITY}
         if index.exists():
-            shutil.copyfile(index, scratch_index)
+            # copy2 keeps the index timestamp: git compares entries with it to
+            # re-read files changed in the same second as the last staging.
+            shutil.copy2(index, scratch_index)
         else:
             git(root, "read-tree", "HEAD", env=env)
         git(root, "add", "--all", env=env)

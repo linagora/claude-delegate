@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import time
 import unittest
 from pathlib import Path
 
@@ -34,6 +36,23 @@ class ReviewedRevisionTest(FeatureBranchTestCase):
         self.sb.run("hostile-review", "main")
 
         self.assertEqual(index.read_bytes(), before)
+
+    def test_a_file_rewritten_right_after_staging_is_reviewed_as_rewritten(self) -> None:
+        # Same size, same mtime, ctime ignored: only git's racy-entry check,
+        # which compares entries with the index timestamp, can see the change.
+        self.sb.git("config", "core.trustctime", "false")
+        staged = self.sb.repo / "staged.py"
+        past = time.time() - 100
+        self.sb.write("staged.py", "STAGED = 1\n")
+        os.utime(staged, (past, past))
+        self.sb.git("add", "staged.py")
+        os.utime(self.sb.repo / ".git" / "index", (past, past))
+        self.sb.write("staged.py", "STAGED = 2\n")
+        os.utime(staged, (past, past))
+
+        self.sb.run("hostile-review", "main")
+
+        self.assertIn("+STAGED = 2", self.sb.fake.last_call()["stdin"])
 
     def test_the_reviewed_revision_is_an_unreferenced_commit_on_top_of_head(self) -> None:
         self.sb.write("new_module.py", "UNTRACKED_CHANGE = 1\n")
