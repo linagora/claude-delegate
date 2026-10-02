@@ -98,7 +98,9 @@ def _raise_on_failure(payload: Dict[str, Any], returncode: int) -> None:
         raise DelegateError(f"{_INVALID_OUTPUT} (tentatives épuisées)", EXIT_INVALID_OUTPUT)
     if not payload.get("is_error") and subtype == "success" and returncode == 0:
         return
-    reason = str(payload.get("result") or subtype or f"code {returncode}")
+    errors = payload.get("errors")
+    details = "; ".join(str(e) for e in errors) if isinstance(errors, list) else ""
+    reason = str(payload.get("result") or details or subtype or f"code {returncode}")
     if _USAGE_LIMIT.search(reason):
         resets = _RESETS.search(reason)
         when = f" (reprise : {resets.group(1).strip().rstrip('.')})" if resets else ""

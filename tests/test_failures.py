@@ -73,6 +73,11 @@ class FailureTest(FeatureBranchTestCase):
 
                 self.assert_failure(INVALID_OUTPUT, "sortie structurée")
 
+    def test_an_execution_error_reports_its_details(self) -> None:
+        self.sb.fake.reply(failed(subtype="error_during_execution", result="", errors=["Tool crashed: boom"]), 1)
+
+        self.assert_failure(DELEGATE_FAILURE, "Tool crashed: boom")
+
     def test_any_other_error_is_a_delegate_failure(self) -> None:
         for name, stdout, code in [
             ("erreur signalée", json.dumps(failed(result="Internal server error")), 1),
