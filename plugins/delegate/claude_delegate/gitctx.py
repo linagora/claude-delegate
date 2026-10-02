@@ -21,7 +21,7 @@ MAX_DIFF_CHARS = 1_000_000
 
 #: Identity of the technical commit that freezes the reviewed revision, so that
 #: building it never depends on the user's git configuration.
-_SNAPSHOT_IDENTITY = {
+_TECHNICAL_IDENTITY = {
     "GIT_AUTHOR_NAME": "claude-delegate",
     "GIT_AUTHOR_EMAIL": "claude-delegate@localhost",
     "GIT_COMMITTER_NAME": "claude-delegate",
@@ -35,7 +35,7 @@ class HostileContext:
     origin_url: Optional[str]
     base: str
     merge_base: str
-    snapshot: str
+    reviewed_revision: str
     diff: str
 
 
@@ -52,9 +52,9 @@ def hostile_context(cwd: Path, base: Optional[str]) -> HostileContext:
     merge_base = _git_or_none(root, "merge-base", base, "HEAD")
     if merge_base is None:
         raise DelegateError(f"aucun ancêtre commun entre {base} et HEAD", EXIT_PREPARATION)
-    snapshot = _snapshot(root)
+    reviewed_revision = _freeze_working_tree(root)
     diff = git(
-        root, "diff", "--no-color", "--no-ext-diff", merge_base, snapshot, "--", ".", *_DENIED, strip=False
+        root, "diff", "--no-color", "--no-ext-diff", merge_base, reviewed_revision, "--", ".", *_DENIED, strip=False
     )
     if not diff.strip():
         raise DelegateError(f"rien à relire : aucun changement depuis {base}", EXIT_PREPARATION)
@@ -68,7 +68,7 @@ def hostile_context(cwd: Path, base: Optional[str]) -> HostileContext:
         origin_url=origin_url(root),
         base=base,
         merge_base=merge_base,
-        snapshot=snapshot,
+        reviewed_revision=reviewed_revision,
         diff=diff,
     )
 
@@ -90,7 +90,7 @@ def git(cwd: Path, *args: str, strip: bool = True, env: Optional[Dict[str, str]]
     return done.stdout.strip() if strip else done.stdout
 
 
-def _snapshot(root: Path) -> str:
+def _freeze_working_tree(root: Path) -> str:
     """The working tree frozen as an unreferenced commit on top of HEAD.
 
     Untracked files are included and ignored ones are not. It is built in a
@@ -100,7 +100,7 @@ def _snapshot(root: Path) -> str:
     index = index if index.is_absolute() else root / index
     with tempfile.TemporaryDirectory(prefix="claude-delegate-") as tmp:
         scratch_index = Path(tmp) / "index"
-        env = {**os.environ, "GIT_INDEX_FILE": str(scratch_index), **_SNAPSHOT_IDENTITY}
+        env = {**os.environ, "GIT_INDEX_FILE": str(scratch_index), **_TECHNICAL_IDENTITY}
         if index.exists():
             # copy2 keeps the index timestamp: git compares entries with it to
             # re-read files changed in the same second as the last staging.

@@ -81,11 +81,11 @@ class ReviewedRevisionTest(FeatureBranchTestCase):
         result = self.sb.run("hostile-review", "main")
 
         report = Path(result.stdout.partition("\n")[0][len("Rapport : ") :])
-        snapshot = json.loads(report.with_suffix(".json").read_text(encoding="utf-8"))["snapshot"]
-        self.assertIn(f"| Révision relue | {snapshot[:12]} |", result.stdout)
-        self.assertEqual(self.sb.git("rev-parse", f"{snapshot}^"), head)
-        self.assertEqual(self.sb.git("show", f"{snapshot}:new_module.py"), "UNTRACKED_CHANGE = 1")
-        self.assertEqual(self.sb.git("for-each-ref", "--contains", snapshot), "")
+        revision = json.loads(report.with_suffix(".json").read_text(encoding="utf-8"))["reviewed_revision"]
+        self.assertIn(f"| Révision relue | {revision[:12]} |", result.stdout)
+        self.assertEqual(self.sb.git("rev-parse", f"{revision}^"), head)
+        self.assertEqual(self.sb.git("show", f"{revision}:new_module.py"), "UNTRACKED_CHANGE = 1")
+        self.assertEqual(self.sb.git("for-each-ref", "--contains", revision), "")
         self.assertEqual(self.sb.git("rev-parse", "HEAD"), head)
 
     def test_an_unknown_base_fails_without_calling_the_reviewer(self) -> None:

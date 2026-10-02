@@ -46,7 +46,7 @@ def _hostile_review(base: Optional[str]) -> int:
         repo=archive.repo_key(ctx.root, ctx.origin_url),
         base=ctx.base,
         merge_base=ctx.merge_base,
-        snapshot=ctx.snapshot,
+        reviewed_revision=ctx.reviewed_revision,
         review=interpret.read_review(done),
     )
     markdown = hostile.markdown()

@@ -17,7 +17,7 @@ class HostileReport:
     repo: str
     base: str
     merge_base: str
-    snapshot: str
+    reviewed_revision: str
     review: Review
 
     def markdown(self) -> str:
@@ -31,7 +31,7 @@ class HostileReport:
             "repo": self.repo,
             "base": self.base,
             "merge_base": self.merge_base,
-            "snapshot": self.snapshot,
+            "reviewed_revision": self.reviewed_revision,
             "model": self.review.model,
             "summary": self.review.summary,
             "findings": [asdict(finding) for finding in self.review.findings],
@@ -43,7 +43,7 @@ class HostileReport:
             ("Date (UTC)", f"{self.created_at:%Y-%m-%d %H:%M:%S}"),
             ("Dépôt", self.repo),
             ("Base", f"{self.base} (merge-base {self.merge_base[:12]})"),
-            ("Révision relue", self.snapshot[:12]),
+            ("Révision relue", self.reviewed_revision[:12]),
             ("Modèle", self.review.model),
         ]
 
