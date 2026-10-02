@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
-from .errors import DelegateError
+from .errors import EXIT_PREPARATION, DelegateError
 
 #: Identity of the technical commit that freezes the reviewed revision, so that
 #: building it never depends on the user's git configuration.
@@ -35,9 +35,13 @@ class HostileContext:
 def hostile_context(cwd: Path, base: Optional[str]) -> HostileContext:
     root = Path(git(cwd, "rev-parse", "--show-toplevel"))
     base = base or default_base(root)
+    if _git_or_none(root, "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}") is None:
+        raise DelegateError(f"base introuvable : {base}", EXIT_PREPARATION)
     merge_base = git(root, "merge-base", base, "HEAD")
     snapshot = _snapshot(root)
     diff = git(root, "diff", "--no-color", "--no-ext-diff", merge_base, snapshot, strip=False)
+    if not diff.strip():
+        raise DelegateError(f"rien à relire : aucun changement depuis {base}", EXIT_PREPARATION)
     return HostileContext(
         root=root,
         origin_url=origin_url(root),

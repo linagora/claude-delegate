@@ -6,6 +6,7 @@ from pathlib import Path
 
 from tests.support import FeatureBranchTestCase
 
+PREPARATION_FAILURE = 3
 
 
 class ReviewedRevisionTest(FeatureBranchTestCase):
@@ -47,6 +48,22 @@ class ReviewedRevisionTest(FeatureBranchTestCase):
         self.assertEqual(self.sb.git("show", f"{snapshot}:new_module.py"), "UNTRACKED_CHANGE = 1")
         self.assertEqual(self.sb.git("for-each-ref", "--contains", snapshot), "")
         self.assertEqual(self.sb.git("rev-parse", "HEAD"), head)
+
+    def test_an_unknown_base_fails_without_calling_the_reviewer(self) -> None:
+        result = self.sb.run("hostile-review", "no-such-branch")
+
+        self.assertEqual(result.returncode, PREPARATION_FAILURE, result.stderr)
+        self.assertIn("base introuvable : no-such-branch", result.stderr)
+        self.assertEqual(self.sb.fake.calls(), [])
+
+    def test_nothing_to_review_fails_without_calling_the_reviewer(self) -> None:
+        self.sb.git("switch", "-q", "main")
+
+        result = self.sb.run("hostile-review", "main")
+
+        self.assertEqual(result.returncode, PREPARATION_FAILURE, result.stderr)
+        self.assertIn("rien à relire", result.stderr)
+        self.assertEqual(self.sb.fake.calls(), [])
 
 
 if __name__ == "__main__":
