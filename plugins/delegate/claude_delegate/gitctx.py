@@ -42,10 +42,7 @@ class HostileContext:
 
 
 def hostile_context(cwd: Path, base: Optional[str]) -> HostileContext:
-    toplevel = _git_or_none(cwd, "rev-parse", "--show-toplevel")
-    if toplevel is None:
-        raise DelegateError(f"pas un dépôt git : {cwd}", EXIT_PREPARATION)
-    root = Path(toplevel)
+    root = _repository(cwd)
     if _git_or_none(root, "rev-parse", "--verify", "--quiet", "HEAD^{commit}") is None:
         raise DelegateError("le dépôt n'a encore aucun commit", EXIT_PREPARATION)
     base = base or default_base(root)
@@ -56,23 +53,13 @@ def hostile_context(cwd: Path, base: Optional[str]) -> HostileContext:
         raise DelegateError(f"aucun ancêtre commun entre {base} et HEAD", EXIT_PREPARATION)
     conventions_text = trusted_conventions(root, merge_base)
     reviewed_revision = _freeze_working_tree(root)
-    diff = git(
-        root, "diff", "--no-color", "--no-ext-diff", merge_base, reviewed_revision, "--", ".", *_DENIED, strip=False
-    )
-    if not diff.strip():
-        raise DelegateError(f"rien à relire : aucun changement depuis {base}", EXIT_PREPARATION)
-    if len(diff) > MAX_DIFF_CHARS:
-        size, limit = (f"{n:,}".replace(",", " ") for n in (len(diff), MAX_DIFF_CHARS))
-        raise DelegateError(
-            f"diff trop volumineux pour une revue : {size} caractères (maximum {limit})", EXIT_PREPARATION
-        )
     return HostileContext(
         root=root,
         origin_url=origin_url(root),
         base=base,
         merge_base=merge_base,
         reviewed_revision=reviewed_revision,
-        diff=diff,
+        diff=_reviewable_diff(root, merge_base, reviewed_revision, f"aucun changement depuis {base}"),
         conventions=conventions_text,
     )
 
@@ -97,6 +84,28 @@ def git(cwd: Path, *args: str, strip: bool = True, env: Optional[Dict[str, str]]
     if done.returncode != 0:
         raise DelegateError(f"git {' '.join(args)} a échoué : {done.stderr.strip()}", EXIT_PREPARATION)
     return done.stdout.strip() if strip else done.stdout
+
+
+def _repository(cwd: Path) -> Path:
+    """The root of the repository holding `cwd`."""
+    toplevel = _git_or_none(cwd, "rev-parse", "--show-toplevel")
+    if toplevel is None:
+        raise DelegateError(f"pas un dépôt git : {cwd}", EXIT_PREPARATION)
+    return Path(toplevel)
+
+
+def _reviewable_diff(root: Path, start: str, end: str, unchanged: str) -> str:
+    """The diff from `start` to `end` that the reviewer receives, without denied
+    files; `unchanged` says why there is nothing to review when it is empty."""
+    diff = git(root, "diff", "--no-color", "--no-ext-diff", start, end, "--", ".", *_DENIED, strip=False)
+    if not diff.strip():
+        raise DelegateError(f"rien à relire : {unchanged}", EXIT_PREPARATION)
+    if len(diff) > MAX_DIFF_CHARS:
+        size, limit = (f"{n:,}".replace(",", " ") for n in (len(diff), MAX_DIFF_CHARS))
+        raise DelegateError(
+            f"diff trop volumineux pour une revue : {size} caractères (maximum {limit})", EXIT_PREPARATION
+        )
+    return diff
 
 
 def _freeze_working_tree(root: Path) -> str:
