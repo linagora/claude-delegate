@@ -39,9 +39,14 @@ def _with_imports(read: Reader, path: str, chain: Tuple[str, ...]) -> Optional[s
     lines = []
     for line in content.splitlines():
         match = _IMPORT.match(line)
-        target = _imported_path(path, match.group(1)) if match else None
+        if not match:
+            lines.append(line)
+            continue
+        target = _imported_path(path, match.group(1))
         imported = _with_imports(read, target, chain + (path,)) if target else None
-        lines.append(line if imported is None else imported)
+        # An import left as `@path` could send the reviewer to read the file
+        # from the reviewed tree, which is not trusted: say it was ignored.
+        lines.append(f"(import ignoré : {match.group(1)})" if imported is None else imported)
     return "\n".join(lines)
 
 

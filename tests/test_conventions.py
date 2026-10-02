@@ -101,6 +101,21 @@ class ConventionsTest(FeatureBranchTestCase):
         self.assertIn("conventions illisibles", result.stderr)
         self.assertEqual(self.sb.fake.calls(), [])
 
+    def test_imports_that_cannot_be_followed_are_marked_rather_than_left_as_imports(self) -> None:
+        self.on_main(
+            {
+                "CLAUDE.md": "@~/notes.md\n@/etc/hosts\n@../outside.md\n@missing.md\n@docs\n@loop.md\n",
+                "loop.md": "@CLAUDE.md\nCONTENU_EN_BOUCLE\n",
+                "docs/guide.md": "guide\n",
+            }
+        )
+
+        section = self.system_prompt().split(SECTION, 1)[1]
+
+        self.assertNotRegex(section, r"(?m)^@")
+        self.assertEqual(section.count("(import ignoré : "), 6)
+        self.assertEqual(section.count("CONTENU_EN_BOUCLE"), 1)
+
     def test_the_task_and_its_conventions_travel_in_one_prompt_file(self) -> None:
         self.on_main({"CLAUDE.md": "CONVENTION_DE_BASE\n"})
 
