@@ -67,7 +67,7 @@ L'en-tête du rapport indique comment la revue a tourné :
 | 4 | Quota Claude épuisé, avec la date de reprise si elle est connue |
 | 5 | Revue incomplète : plafond de budget ou nombre maximal de tours atteint |
 | 6 | Sortie structurée du relecteur absente ou non conforme |
-| 7 | Autre échec de la session déléguée |
+| 7 | Autre échec de la session déléguée, ou rapport impossible à archiver |
 
 En cas d'échec, rien n'est archivé et le message part sur la sortie d'erreur. Claude Code annule alors la commande et affiche ce message.
 
