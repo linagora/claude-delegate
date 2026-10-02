@@ -3,12 +3,30 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from . import schemas
-from .errors import DelegateError
+from .errors import EXIT_INCOMPLETE, EXIT_INVALID_OUTPUT, EXIT_QUOTA, DelegateError
+
+#: How Claude Code reports a usage limit, e.g. "You've hit your weekly limit ·
+#: resets Oct 6 at 10am (Europe/Paris)", "You're out of extra usage · resets 3pm"
+#: or "5-hour limit reached ∙ resets 3pm".
+_USAGE_LIMIT = re.compile(r"hit your [^\n]*limit|limit reached|out of (?:extra )?usage", re.IGNORECASE)
+#: The reset time ends at the end of the line or at the next separator.
+_RESETS = re.compile(r"\bresets\s+([^\n·∙|]+)", re.IGNORECASE)
+
+#: Results cut short by the review's own caps.
+_INCOMPLETE = {
+    "error_max_budget_usd": "revue incomplète : plafond de budget atteint",
+    "error_max_turns": "revue incomplète : nombre maximal de tours atteint",
+}
+
+_INVALID_OUTPUT = "la sortie structurée du délégué est absente ou non conforme au schéma"
+#: Claude Code gave up producing output that matches the schema.
+_OUTPUT_RETRIES_EXHAUSTED = "error_max_structured_output_retries"
 
 
 @dataclass(frozen=True)
@@ -31,6 +49,11 @@ class Review:
     summary: str
     findings: List[Finding]
     model: str
+    num_turns: Optional[int]
+    cost_usd: Optional[float]
+    duration_s: Optional[float]
+    #: None when the result does not say (unlike an empty list: none refused).
+    permission_denials: Optional[List[str]]
 
 
 def read_review(done: "subprocess.CompletedProcess[str]") -> Review:
@@ -42,17 +65,61 @@ def read_review(done: "subprocess.CompletedProcess[str]") -> Review:
         ) from None
     if not isinstance(payload, dict):
         raise DelegateError(f"sortie inattendue du délégué : {_excerpt(done.stdout)}")
-    if payload.get("is_error") or payload.get("subtype") != "success" or done.returncode != 0:
-        reason = payload.get("result") or payload.get("subtype") or f"code {done.returncode}"
-        raise DelegateError(f"la revue a échoué : {_excerpt(str(reason))}")
+    _raise_on_failure(payload, done.returncode)
     structured = payload.get("structured_output")
     if not isinstance(structured, dict) or not schemas.is_review(structured):
-        raise DelegateError("la sortie structurée du délégué est absente ou non conforme au schéma")
+        raise DelegateError(_INVALID_OUTPUT, EXIT_INVALID_OUTPUT)
+    cost = payload.get("total_cost_usd")
+    duration = payload.get("duration_ms")
+    denials = payload.get("permission_denials")
     return Review(
         summary=structured["summary"],
         findings=_numbered(structured["findings"]),
         model=_model(payload),
+        num_turns=_int_or_none(payload.get("num_turns")),
+        cost_usd=float(cost) if isinstance(cost, (int, float)) else None,
+        duration_s=duration / 1000 if isinstance(duration, (int, float)) else None,
+        permission_denials=(
+            # Deduplicated, in order: the reviewer often retries a refused call.
+            list(dict.fromkeys(_denial(d) for d in denials if isinstance(d, dict)))
+            if isinstance(denials, list)
+            else None
+        ),
     )
+
+
+def _int_or_none(value: Any) -> Optional[int]:
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _denial(denial: Dict[str, Any]) -> str:
+    """`Read /repo/.env`: the refused tool and what it targeted."""
+    target = denial.get("tool_input")
+    if isinstance(target, dict):
+        what = next((str(target[k]) for k in ("file_path", "path", "pattern", "command") if target.get(k)), "")
+    else:
+        what = target if isinstance(target, str) else ""
+    return f"{denial.get('tool_name', '?')} {what}".strip()
+
+
+def _raise_on_failure(payload: Dict[str, Any], returncode: int) -> None:
+    subtype = payload.get("subtype")
+    if subtype in _INCOMPLETE:
+        raise DelegateError(_INCOMPLETE[subtype], EXIT_INCOMPLETE)
+    if subtype == _OUTPUT_RETRIES_EXHAUSTED:
+        raise DelegateError(f"{_INVALID_OUTPUT} (tentatives épuisées)", EXIT_INVALID_OUTPUT)
+    if not payload.get("is_error") and subtype == "success" and returncode == 0:
+        return
+    errors = payload.get("errors")
+    details = "; ".join(str(e) for e in errors) if isinstance(errors, list) else ""
+    reason = str(payload.get("result") or details or subtype or f"code {returncode}")
+    if _USAGE_LIMIT.search(reason):
+        resets = _RESETS.search(reason)
+        when = f" (reprise : {resets.group(1).strip().rstrip('.')})" if resets else ""
+        raise DelegateError(f"quota Claude épuisé{when}", EXIT_QUOTA)
+    if payload.get("api_error_status") == 429:
+        raise DelegateError(f"limite de débit Claude atteinte : {_excerpt(reason)}", EXIT_QUOTA)
+    raise DelegateError(f"la revue a échoué : {_excerpt(reason)}")
 
 
 def _numbered(findings: List[Dict[str, Any]]) -> List[Finding]:
@@ -75,10 +142,16 @@ def _numbered(findings: List[Dict[str, Any]]) -> List[Finding]:
 
 def _model(payload: Dict[str, Any]) -> str:
     """The model that actually answered: the costliest entry of modelUsage."""
-    usage = payload.get("modelUsage") or {}
-    if not usage:
+    usage = payload.get("modelUsage")
+    if not isinstance(usage, dict) or not usage:
         return "inconnu"
-    return str(max(usage, key=lambda name: (usage[name] or {}).get("costUSD", 0)))
+
+    def cost(name: str) -> float:
+        entry = usage[name]
+        value = entry.get("costUSD") if isinstance(entry, dict) else None
+        return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 0.0
+
+    return str(max(usage, key=cost))
 
 
 def _excerpt(text: str, limit: int = 300) -> str:

@@ -59,7 +59,7 @@ class BinaryResolutionTest(FeatureBranchTestCase):
             "hostile-review", "main", extra_env={"CLAUDE_DELEGATE_BIN": str(self.sb.root / "absent")}
         )
 
-        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.returncode, 3, result.stderr)
         self.assertIn("introuvable", result.stderr)
         self.assertNotIn("Traceback", result.stderr)
 

@@ -1,6 +1,6 @@
 # claude-delegate
 
-Plugin Claude Code qui délègue les revues de code d'une session branchée sur DeepSeek à Claude Opus. La revue tourne dans une session Claude Code isolée et en lecture seule, déclenchée de façon déterministe par une slash command. La spécification est dans l'issue #1.
+Plugin Claude Code qui délègue les revues de code d'une session branchée sur DeepSeek à Claude : Opus par défaut, Sonnet à la demande. La revue tourne dans une session Claude Code isolée et en lecture seule, déclenchée de façon déterministe par une slash command. La spécification est dans l'issue #1.
 
 ## Installation
 
@@ -33,7 +33,7 @@ Prérequis : Claude Code (de préférence le binaire natif, `~/.local/bin/claude
 ## Utilisation
 
 ```
-/delegate:hostile-review [base]
+/delegate:hostile-review [base] [--model sonnet]
 ```
 
 La commande relit tous les changements depuis le merge-base avec la base : commités, indexés ou non, ainsi que les nouveaux fichiers non suivis, mais pas ceux qu'ignore git. Sans argument, la base est la branche par défaut d'`origin`, ou `main` à défaut.
@@ -47,6 +47,30 @@ La revue ne démarre pas, avec le code de sortie 3, dans ces cas :
 - il n'y a rien à relire ;
 - le diff dépasse 1 000 000 caractères.
 
+Le relecteur est Opus par défaut. `--model sonnet` le remplace par Sonnet, et aucun autre modèle n'est accepté.
+
+L'en-tête du rapport indique comment la revue a tourné :
+
+- le modèle réellement utilisé et l'effort ;
+- les tours, le coût estimé et la durée ;
+- le hash du prompt envoyé ;
+- les versions du plugin et de Claude Code ;
+- les permissions refusées au relecteur.
+
+### Codes de sortie
+
+| Code | Signification |
+|---|---|
+| 0 | Revue réussie, rapport archivé |
+| 2 | Arguments invalides |
+| 3 | Préparation impossible : le relecteur n'a pas été appelé |
+| 4 | Quota Claude épuisé, avec la date de reprise si elle est connue |
+| 5 | Revue incomplète : plafond de budget ou nombre maximal de tours atteint |
+| 6 | Sortie structurée du relecteur absente ou non conforme |
+| 7 | Autre échec de la session déléguée, ou rapport impossible à archiver |
+
+En cas d'échec, rien n'est archivé et le message part sur la sortie d'erreur. Claude Code annule alors la commande et affiche ce message.
+
 Le rapport (constats Bloquant, Important et Mineur) est archivé dans `${XDG_STATE_HOME:-~/.local/state}/claude-delegate/<dépôt>/`, accompagné d'un JSON. Il est ensuite injecté dans la session. DeepSeek vérifie et classe chaque point sans rien modifier avant ta validation.
 
 Depuis un terminal : `<dossier du plugin>/bin/claude-delegate hostile-review [base]`.
@@ -57,7 +81,7 @@ Depuis un terminal : `<dossier du plugin>/bin/claude-delegate hostile-review [ba
 - **Configuration ignorée** : les settings, hooks, règles d'autorisation et `CLAUDE.md` du projet ne sont pas chargés, ni les serveurs MCP (`--strict-mcp-config`). En cas de demande non autorisée, le refus est automatique (`--permission-mode dontAsk`).
 - **Fichiers interdits** : `**/.env`, `**/.env.*` et `**/.claude/settings*.json`. Le relecteur ne peut pas les lire, et ils sont exclus du diff qu'il reçoit.
 - **Environnement reconstruit à partir de rien** : seules `HOME`, `USER`, `LOGNAME`, `PATH`, `LANG`, `LC_*`, `TERM` et `TMPDIR` passent, plus `CLAUDE_CONFIG_DIR=~/.claude-anthropic`. Aucune variable `ANTHROPIC_*` ou `CLAUDE_CODE_*` ni aucun jeton.
-- **Coût borné** : Opus en effort `high`, 30 tours au plus, et un plafond de 5 $ estimés. Ce plafond est souple : Claude Code le vérifie après chaque appel, il peut donc être dépassé d'un appel.
+- **Coût borné** : effort `high`, 30 tours au plus, et un plafond de 5 $ estimés. Ce plafond est souple : Claude Code le vérifie après chaque appel, il peut donc être dépassé d'un appel.
 
 Variables utiles :
 

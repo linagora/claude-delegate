@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 from . import policy
-from .errors import DelegateError
+from .errors import EXIT_PREPARATION, DelegateError
 
 #: The plugin's prompts. ${CLAUDE_PLUGIN_ROOT} is not exported to the shell, so
 #: the CLI finds them from its own location.
@@ -22,21 +24,45 @@ DENIED_READS = [f"Read({path})" for path in policy.DENIED_PATHS]
 #: the DeepSeek ANTHROPIC_* settings, CLAUDE_CODE_* tuning or tokens, stays out.
 PASSED_ENV = ("HOME", "USER", "LOGNAME", "PATH", "LANG", "TERM", "TMPDIR")
 
-MODEL = "opus"
+#: The models a review may use; Opus unless the user asks for Sonnet.
+MODELS = ("opus", "sonnet")
+DEFAULT_MODEL = "opus"
 EFFORT = "high"
 #: Bounds on what one review may consume from the user's quota.
 MAX_TURNS = 30
 MAX_BUDGET_USD = 5
 
 
+@dataclass(frozen=True)
+class Execution:
+    """How the reviewer was run, as recorded in the report."""
+
+    requested_model: str
+    effort: str
+    prompt_sha256: str
+    claude_code_version: Optional[str]
+
+
 def launch(
-    root: Path, task_input: str, schema: Dict[str, Any], prompt_file: Path, instruction: str
-) -> "subprocess.CompletedProcess[str]":
-    """Run the reviewer in `root` on `task_input` and return its raw result."""
+    root: Path,
+    task_input: str,
+    schema: Dict[str, Any],
+    prompt_file: Path,
+    instruction: str,
+    *,
+    model: str,
+) -> Tuple["subprocess.CompletedProcess[str]", Execution]:
+    """Run the reviewer in `root` on `task_input`; return its raw result and how it ran."""
     binary = resolve_binary()
+    execution = Execution(
+        requested_model=model,
+        effort=EFFORT,
+        prompt_sha256=hashlib.sha256(prompt_file.read_bytes()).hexdigest(),
+        claude_code_version=claude_code_version(binary),
+    )
     try:
-        return subprocess.run(
-            _command(binary, schema, prompt_file, instruction),
+        done = subprocess.run(
+            _command(binary, model, schema, prompt_file, instruction),
             input=task_input,
             cwd=root,
             env=_environment(),
@@ -45,7 +71,27 @@ def launch(
             errors="replace",
         )
     except OSError as error:
-        raise DelegateError(f"binaire claude introuvable ou non exécutable : {binary} ({error.strerror})") from None
+        raise DelegateError(
+            f"binaire claude introuvable ou non exécutable : {binary} ({error.strerror})", EXIT_PREPARATION
+        ) from None
+    return done, execution
+
+
+def claude_code_version(binary: str) -> Optional[str]:
+    """`2.1.287` from `claude --version`, or None when it cannot be told."""
+    try:
+        done = subprocess.run(
+            [binary, "--version"],
+            env=_environment(),
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    words = done.stdout.split()
+    return words[0] if done.returncode == 0 and words else None
 
 
 def resolve_binary() -> str:
@@ -61,7 +107,9 @@ def resolve_binary() -> str:
         candidate = Path(directory) / "claude"
         if directory and _is_executable(candidate) and not _is_cmux_shim(candidate):
             return str(candidate)
-    raise DelegateError("binaire claude introuvable : installez Claude Code ou définissez CLAUDE_DELEGATE_BIN")
+    raise DelegateError(
+        "binaire claude introuvable : installez Claude Code ou définissez CLAUDE_DELEGATE_BIN", EXIT_PREPARATION
+    )
 
 
 def _is_executable(path: Path) -> bool:
@@ -84,7 +132,9 @@ def _environment() -> Dict[str, str]:
     return env
 
 
-def _command(binary: str, schema: Dict[str, Any], prompt_file: Path, instruction: str) -> List[str]:
+def _command(
+    binary: str, model: str, schema: Dict[str, Any], prompt_file: Path, instruction: str
+) -> List[str]:
     """The isolation contract, validated against a booby-trapped project (probe V1).
 
     --restricted ignores user, project and local settings files (env blocks,
@@ -104,7 +154,7 @@ def _command(binary: str, schema: Dict[str, Any], prompt_file: Path, instruction
         "--settings",
         json.dumps({"permissions": {"deny": DENIED_READS}}),
         "--model",
-        MODEL,
+        model,
         "--effort",
         EFFORT,
         "--max-turns",
