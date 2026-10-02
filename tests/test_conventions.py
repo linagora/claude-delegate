@@ -90,6 +90,17 @@ class ConventionsTest(FeatureBranchTestCase):
         self.assertNotIn("CONTENU_DU_DOSSIER", prompt)
         self.assertNotIn("guide.md", prompt)
 
+    def test_unreadable_conventions_stop_the_review_before_the_reviewer_is_called(self) -> None:
+        self.on_main({"CLAUDE.md": "CONVENTION_DE_BASE\n"})
+        blob = self.sb.git("rev-parse", "main:CLAUDE.md")
+        (self.sb.repo / ".git" / "objects" / blob[:2] / blob[2:]).unlink()
+
+        result = self.sb.run("hostile-review", "main")
+
+        self.assertEqual(result.returncode, 3, result.stderr)
+        self.assertIn("conventions illisibles", result.stderr)
+        self.assertEqual(self.sb.fake.calls(), [])
+
     def test_the_task_and_its_conventions_travel_in_one_prompt_file(self) -> None:
         self.on_main({"CLAUDE.md": "CONVENTION_DE_BASE\n"})
 

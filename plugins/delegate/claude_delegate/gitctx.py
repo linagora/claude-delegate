@@ -54,6 +54,7 @@ def hostile_context(cwd: Path, base: Optional[str]) -> HostileContext:
     merge_base = _git_or_none(root, "merge-base", base, "HEAD")
     if merge_base is None:
         raise DelegateError(f"aucun ancêtre commun entre {base} et HEAD", EXIT_PREPARATION)
+    conventions_text = trusted_conventions(root, merge_base)
     reviewed_revision = _freeze_working_tree(root)
     diff = git(
         root, "diff", "--no-color", "--no-ext-diff", merge_base, reviewed_revision, "--", ".", *_DENIED, strip=False
@@ -72,7 +73,7 @@ def hostile_context(cwd: Path, base: Optional[str]) -> HostileContext:
         merge_base=merge_base,
         reviewed_revision=reviewed_revision,
         diff=diff,
-        conventions=trusted_conventions(root, merge_base),
+        conventions=conventions_text,
     )
 
 
@@ -124,15 +125,24 @@ def _entry(root: Path, revision: str, path: str) -> Optional[Tuple[str, str]]:
     """("file", text) or ("link", target) for a path of `revision`; None when it
     is absent or is not a file, such as a directory."""
     listed = _run(root, ("ls-tree", "-z", revision, "--", path))
-    if listed.returncode != 0 or not listed.stdout:
+    if listed.returncode != 0:
+        raise _unreadable(path, listed)
+    if not listed.stdout:
         return None
     mode, kind, sha = listed.stdout.split("\0", 1)[0].partition("\t")[0].split()
     if kind != "blob":
         return None
     blob = _run(root, ("cat-file", "blob", sha))
     if blob.returncode != 0:
-        return None
+        raise _unreadable(path, blob)
     return ("link" if mode == "120000" else "file", blob.stdout)
+
+
+def _unreadable(path: str, done: "subprocess.CompletedProcess[str]") -> DelegateError:
+    """A conventions file git cannot read: reviewing without it would hide that."""
+    return DelegateError(
+        f"conventions illisibles : {path} au merge-base ({done.stderr.strip()})", EXIT_PREPARATION
+    )
 
 
 def _git_or_none(cwd: Path, *args: str) -> Optional[str]:
