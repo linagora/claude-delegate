@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from . import archive, delegate, gitctx, schemas
+from . import archive, delegate, gitctx, report, schemas
 from .errors import EXIT_PREPARATION, DelegateError
 from .interpret import Finding
 
@@ -49,7 +49,7 @@ def original(directory: Path, repo: str, designation: Optional[str]) -> Original
             "aucun rapport à re-revoir pour ce dépôt : lance d'abord /delegate:hostile-review", EXIT_PREPARATION
         )
     record = archive.load(companion)
-    if record.get("type") == "recheck":
+    if record.get("type") == report.RECHECK:
         original_id = record.get("original")
         if not isinstance(original_id, str) or not archive.is_report_id(original_id):
             raise DelegateError(f"rapport illisible : {companion}", EXIT_PREPARATION)
@@ -59,7 +59,7 @@ def original(directory: Path, repo: str, designation: Optional[str]) -> Original
         raise DelegateError(
             f"ce rapport concerne un autre dépôt ({record.get('repo')}), pas {repo}", EXIT_PREPARATION
         )
-    if record.get("type") == "pr":
+    if record.get("type") == report.PULL_REQUEST:
         raise DelegateError("la re-revue d'une pull request n'est pas encore prise en charge", EXIT_PREPARATION)
     return _parse(record, companion)
 
@@ -95,7 +95,7 @@ def _parse(record: Dict[str, Any], companion: Path) -> Original:
 
     findings = record.get("findings")
     if (
-        record.get("type") != "hostile"
+        record.get("type") != report.HOSTILE
         or not archive.is_report_id(text("id"))
         or not text("base")
         or not _REVISION.fullmatch(text("reviewed_revision"))

@@ -13,6 +13,10 @@ from .interpret import Finding, Review, Status
 from .schemas import SEVERITIES
 
 
+#: Report kinds, as their JSON companion records them.
+HOSTILE, PULL_REQUEST, RECHECK = "hostile", "pr", "recheck"
+
+
 @dataclass(frozen=True)
 class Subject:
     """What a report is about: its kind and title, and its own header rows and
@@ -28,8 +32,8 @@ class Subject:
 
 def hostile_subject(ctx: HostileContext) -> Subject:
     return Subject(
-        kind="hostile",
-        slug="hostile",
+        kind=HOSTILE,
+        slug=HOSTILE,
         title="Revue hostile",
         rows=[
             _base_row(ctx.base, ctx.merge_base),
@@ -46,8 +50,8 @@ def hostile_subject(ctx: HostileContext) -> Subject:
 def pr_subject(ctx: PullRequestContext) -> Subject:
     pr = ctx.pull_request
     return Subject(
-        kind="pr",
-        slug=f"pr-{pr.number}",
+        kind=PULL_REQUEST,
+        slug=f"{PULL_REQUEST}-{pr.number}",
         title="Revue de pull request",
         rows=[
             ("Pull request", f"#{pr.number} {pr.url}"),
@@ -70,8 +74,8 @@ def pr_subject(ctx: PullRequestContext) -> Subject:
 
 def recheck_subject(original_id: str, ctx: RecheckContext) -> Subject:
     return Subject(
-        kind="recheck",
-        slug="recheck",
+        kind=RECHECK,
+        slug=RECHECK,
         title="Re-revue",
         rows=[
             ("Revue d'origine", original_id),
