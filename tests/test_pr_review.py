@@ -185,7 +185,7 @@ class PullRequestReviewTest(PullRequestTestCase):
         self.assertIn(f"## Verdict\n\nREQUEST_CHANGES : {REASON}", result.stdout)
         self.assertIn("| Pull request | #7 https://github.com/acme/app/pull/7 |", result.stdout)
         self.assertIn("| Branche cible | main |", result.stdout)
-        self.assertIn(f"| Tête | {self.head[:12]} |", result.stdout)
+        self.assertIn(f"| Tête | {self.head} |", result.stdout)
         companion = json.loads(report_path(result.stdout).with_suffix(".json").read_text(encoding="utf-8"))
         self.assertEqual(
             (companion["type"], companion["head"], companion["verdict"]), ("pr", self.head, "REQUEST_CHANGES")

@@ -52,7 +52,8 @@ def pr_subject(ctx: PullRequestContext) -> Subject:
         rows=[
             ("Pull request", f"#{pr.number} {pr.url}"),
             ("Branche cible", pr.base),
-            ("Tête", _short(pr.head)),
+            # In full: DeepSeek reads the reviewed files at this commit.
+            ("Tête", pr.head),
             ("Fichiers non relus", ", ".join(ctx.unreviewed) or "aucun"),
         ],
         fields={
