@@ -102,4 +102,7 @@ def _git_or_none(cwd: Path, *args: str) -> Optional[str]:
 def _run(
     cwd: Path, args: Tuple[str, ...], env: Optional[Dict[str, str]] = None
 ) -> "subprocess.CompletedProcess[str]":
-    return subprocess.run(["git", *args], cwd=cwd, env=env, capture_output=True, text=True)
+    # Reviewed files may hold any bytes: invalid UTF-8 is replaced, not fatal.
+    return subprocess.run(
+        ["git", *args], cwd=cwd, env=env, capture_output=True, encoding="utf-8", errors="replace"
+    )

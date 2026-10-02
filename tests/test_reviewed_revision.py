@@ -25,6 +25,14 @@ class ReviewedRevisionTest(FeatureBranchTestCase):
         self.assertIn("UNTRACKED_CHANGE", reviewed)
         self.assertNotIn("IGNORED_CONTENT", reviewed)
 
+    def test_a_file_that_is_not_utf8_is_reviewed_without_crashing(self) -> None:
+        (self.sb.repo / "latin1.txt").write_bytes("prix = 'café'\n".encode("latin-1"))
+
+        result = self.sb.run("hostile-review", "main")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("prix = 'caf", self.sb.fake.last_call()["stdin"])
+
     def test_the_users_index_is_left_untouched(self) -> None:
         self.sb.write("staged.py", "STAGED = 1\n")
         self.sb.git("add", "staged.py")

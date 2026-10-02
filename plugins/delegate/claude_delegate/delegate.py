@@ -40,7 +40,8 @@ def launch(
             cwd=root,
             env=_environment(),
             capture_output=True,
-            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
     except OSError as error:
         raise DelegateError(f"binaire claude introuvable ou non exécutable : {binary} ({error.strerror})") from None
