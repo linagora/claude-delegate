@@ -117,6 +117,15 @@ class ReviewedRevisionTest(FeatureBranchTestCase):
                 self.assertNotIn("Traceback", result.stderr)
                 self.assertEqual(self.sb.fake.calls(), [])
 
+    def test_a_diff_too_large_to_review_is_refused_without_calling_the_reviewer(self) -> None:
+        self.sb.write("huge.txt", ("x" * 99 + "\n") * 12_000)
+
+        result = self.sb.run("hostile-review", "main")
+
+        self.assertEqual(result.returncode, PREPARATION_FAILURE, result.stderr)
+        self.assertIn("diff trop volumineux", result.stderr)
+        self.assertEqual(self.sb.fake.calls(), [])
+
     def test_nothing_to_review_fails_without_calling_the_reviewer(self) -> None:
         self.sb.git("switch", "-q", "main")
 

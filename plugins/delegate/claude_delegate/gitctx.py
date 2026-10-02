@@ -16,6 +16,9 @@ from .errors import EXIT_PREPARATION, DelegateError
 #: Denied files stay out of the diff too, since the reviewer may not read them.
 _DENIED = [f":(exclude,glob){path}" for path in policy.DENIED_PATHS]
 
+#: Beyond this (about 250k tokens), a review costs too much to be useful.
+MAX_DIFF_CHARS = 1_000_000
+
 #: Identity of the technical commit that freezes the reviewed revision, so that
 #: building it never depends on the user's git configuration.
 _SNAPSHOT_IDENTITY = {
@@ -55,6 +58,11 @@ def hostile_context(cwd: Path, base: Optional[str]) -> HostileContext:
     )
     if not diff.strip():
         raise DelegateError(f"rien à relire : aucun changement depuis {base}", EXIT_PREPARATION)
+    if len(diff) > MAX_DIFF_CHARS:
+        size, limit = (f"{n:,}".replace(",", " ") for n in (len(diff), MAX_DIFF_CHARS))
+        raise DelegateError(
+            f"diff trop volumineux pour une revue : {size} caractères (maximum {limit})", EXIT_PREPARATION
+        )
     return HostileContext(
         root=root,
         origin_url=origin_url(root),
