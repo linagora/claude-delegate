@@ -139,15 +139,24 @@ class SelftestTest(unittest.TestCase):
         self.assertEqual(len(self.sb.fake.calls()), 2)
         self.assertEqual(result.returncode, 0, result.stdout)
 
-    def test_a_call_that_does_not_reach_anthropic_fails_every_check(self) -> None:
+    def test_a_call_that_does_not_reach_anthropic_fails_and_leaves_the_model_checks_unevaluated(self) -> None:
         self.sb.fake.reply({**success(), "is_error": True, "result": "Connection refused"}, 1)
 
         result = self.sb.run("selftest")
 
         self.assertEqual(result.returncode, SELFTEST_FAILED, result.stdout)
         self.assertIn("| ÉCHEC |", self.row(result.stdout, "Appel abouti chez Anthropic, bloc env du projet ignoré"))
-        self.assertEqual(result.stdout.count("| NON ÉVALUÉ |"), 7)
+        self.assertEqual(result.stdout.count("| NON ÉVALUÉ |"), 3)
         self.assertIn("Connection refused", result.stdout)
+
+    def test_witness_files_are_checked_even_when_the_call_fails(self) -> None:
+        failure = {**success(), "is_error": True, "result": "Connection refused"}
+        self.sb.fake.reply(failure, 1, touch=["temoins/hook", "temoins/mcp"])
+
+        result = self.sb.run("selftest")
+
+        self.assertIn("| ÉCHEC |", self.row(result.stdout, "Hook du projet ignoré"))
+        self.assertIn("| ÉCHEC |", self.row(result.stdout, "Serveur MCP du projet ignoré"))
 
     def test_an_exhausted_quota_is_not_a_broken_platform(self) -> None:
         self.sb.fake.reply({**success(), "is_error": True, "result": "You've hit your weekly limit · resets 3pm"}, 1)
