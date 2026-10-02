@@ -4,7 +4,7 @@ Plugin Claude Code qui délègue les revues de code d'une session branchée sur 
 
 ## Installation
 
-Prérequis : Claude Code (de préférence le binaire natif, `~/.local/bin/claude`), git, Python 3.9 ou plus récent, et un abonnement Claude.
+Prérequis : Claude Code (de préférence le binaire natif, `~/.local/bin/claude`), git, Python 3.9 ou plus récent, et un abonnement Claude. Pour relire des pull requests GitHub, il faut aussi GitHub CLI (`gh`).
 
 1. **Installer le plugin**, dans la configuration qu'utilisent tes sessions DeepSeek. Le dépôt est privé : il faut un accès git à `linagora/claude-delegate`.
 
@@ -76,6 +76,31 @@ L'en-tête du rapport indique comment la revue a tourné :
 - les versions du plugin et de Claude Code ;
 - les permissions refusées au relecteur.
 
+### Relire une pull request
+
+```
+/delegate:pr-review <numéro> [--model sonnet]
+```
+
+La commande relit une pull request GitHub sur son propre code, et non sur ta branche locale. `origin` doit être sur `github.com`, et `gh` doit y être connecté (`gh auth login`).
+
+- `gh` fournit le titre, la description, la branche cible, la tête et l'URL de la pull request.
+- git récupère la branche cible, ce qui met à jour `origin/<branche cible>`, puis la tête de la pull request (`pull/<numéro>/head`). Ta branche, ton index et ton arbre de travail ne changent pas.
+- Le relecteur lit la pull request dans un worktree détaché et jetable, créé hors du dépôt sans exécuter aucun hook git. Le CLI en retire d'abord tous les `CLAUDE.md`, `CLAUDE.local.md`, `.claude/` et `.mcp.json`, quelle que soit leur casse : la configuration apportée par la pull request n'atteint jamais le relecteur. Le worktree est supprimé à la fin, même en cas d'échec ou d'interruption.
+- Le relecteur reçoit le titre, la description et le diff depuis le merge-base avec la branche cible. Ses conventions sont celles de la branche cible, jamais celles de la pull request : une modification de `CLAUDE.md` est relue comme du code.
+- Le rapport donne un verdict, APPROVE ou REQUEST_CHANGES, justifié en une phrase. Son en-tête indique le numéro et l'URL de la pull request, sa branche cible et la tête relue.
+
+DeepSeek vérifie ensuite chaque point à la tête relue, avec `git show <tête>:<chemin>`, sans checkout. Rien n'est publié sur GitHub : c'est toi qui décides de ce que tu publies.
+
+Si la pull request évolue, même par un force-push, relance simplement la commande.
+
+La revue ne démarre pas, avec le code de sortie 3, dans ces cas :
+
+- `origin` n'est pas sur `github.com` ;
+- `gh` est absent, ou ne peut pas lire la pull request ;
+- la pull request a changé pendant la préparation : relance alors la commande ;
+- la pull request n'a aucun ancêtre commun avec sa branche cible, ne change rien, ou son diff dépasse 1 000 000 caractères.
+
 ### Codes de sortie
 
 | Code | Signification |
@@ -93,7 +118,7 @@ En cas d'échec, rien n'est archivé et le message part sur la sortie d'erreur. 
 
 Le rapport (constats Bloquant, Important et Mineur) est archivé dans `${XDG_STATE_HOME:-~/.local/state}/claude-delegate/<dépôt>/`, accompagné d'un JSON. Il est ensuite injecté dans la session. DeepSeek vérifie et classe chaque point sans rien modifier avant ta validation.
 
-Depuis un terminal : `<dossier du plugin>/bin/claude-delegate hostile-review [base]`.
+Depuis un terminal : `<dossier du plugin>/bin/claude-delegate hostile-review [base]`, ou `pr-review <numéro>`.
 
 ### Préparer une spec
 
@@ -105,7 +130,7 @@ Les specs ne sont pas déléguées : elles s'écrivent dans une session Claude C
 
 ## Isolation de la session déléguée
 
-- **Lecture seule** : `--restricted --tools "Read,Grep,Glob"`. Pas de shell, pas de web, pas d'écriture, et des lectures confinées au dépôt relu.
+- **Lecture seule** : `--restricted --tools "Read,Grep,Glob"`. Pas de shell, pas de web, pas d'écriture, et des lectures confinées au code relu : le dépôt, ou le worktree de la pull request.
 - **Configuration ignorée** : les settings, hooks, règles d'autorisation et `CLAUDE.md` du projet ne sont pas chargés par Claude Code, ni les serveurs MCP (`--strict-mcp-config`). Seule la version de confiance de `CLAUDE.md`, fournie par le CLI, lui est donnée comme consigne. En cas de demande non autorisée, le refus est automatique (`--permission-mode dontAsk`).
 - **Fichiers interdits** : `**/.env`, `**/.env.*` et `**/.claude/settings*.json`. Le relecteur ne peut pas les lire, et ils sont exclus du diff qu'il reçoit.
 - **Environnement reconstruit à partir de rien** : seules `HOME`, `USER`, `LOGNAME`, `PATH`, `LANG`, `LC_*`, `TERM` et `TMPDIR` passent, plus `CLAUDE_CONFIG_DIR=~/.claude-anthropic`. Aucune variable `ANTHROPIC_*` ou `CLAUDE_CODE_*` ni aucun jeton.
