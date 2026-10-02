@@ -49,6 +49,11 @@ call = {{
     "env": dict(os.environ),
     "cwd": os.getcwd(),
     "cwd_listing": sorted(os.listdir(".")),
+    "cwd_files": {{
+        str(p): p.read_text(encoding="utf-8", errors="replace")
+        for p in sorted(Path(".").rglob("*"))
+        if p.is_file() and ".git" not in p.parts and p.stat().st_size < 10_000
+    }},
     "stdin": sys.stdin.read(),
     "system_prompt": prompt_file.read_text(encoding="utf-8") if prompt_file else None,
 }}
