@@ -8,7 +8,7 @@ import os
 import re
 import secrets
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 from urllib.parse import urlsplit
@@ -27,10 +27,6 @@ def repo_key(root: Path, origin_url: Optional[str]) -> str:
         return from_origin
     digest = hashlib.sha256(str(root).encode("utf-8")).hexdigest()[:8]
     return f"{_safe(root.name)}-{digest}"
-
-
-def now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 def new_id(kind: str, created_at: datetime) -> str:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
@@ -38,7 +39,7 @@ def _hostile_review(base: Optional[str]) -> int:
         delegate.PROMPTS / "hostile-review.md",
         "Revue hostile du diff fourni sur l'entrée standard.",
     )
-    created_at = archive.now()
+    created_at = datetime.now(timezone.utc)
     hostile = report.HostileReport(
         id=archive.new_id("hostile", created_at),
         created_at=created_at,

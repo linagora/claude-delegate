@@ -7,8 +7,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Tuple
 
 from .interpret import Finding, Review
-
-SECTIONS = [("bloquant", "Bloquant"), ("important", "Important"), ("mineur", "Mineur")]
+from .schemas import SEVERITIES
 
 
 @dataclass(frozen=True)
@@ -50,8 +49,8 @@ def _render(title: str, header: List[Tuple[str, str]], review: Review) -> str:
     lines = [f"# {title}", "", "| Champ | Valeur |", "|---|---|"]
     lines += [f"| {label} | {value} |" for label, value in header]
     lines += ["", "## Résumé", "", review.summary.strip(), ""]
-    for severity, name in SECTIONS:
-        lines += [f"## {name}", ""]
+    for severity in SEVERITIES:
+        lines += [f"## {severity.capitalize()}", ""]
         findings = [f for f in review.findings if f.severity == severity]
         lines += _findings(findings) if findings else ["Rien à signaler.", ""]
     return "\n".join(lines).rstrip() + "\n"
