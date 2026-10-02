@@ -18,6 +18,7 @@ ORIGINAL_FINDINGS = [
 LATER_FINDING = {**SAMPLE_FINDING, "problem": "Constat d'une revue plus récente"}
 
 PREPARATION_FAILURE = 3
+INCOMPLETE = 5
 INVALID_OUTPUT = 6
 
 NEW_FINDING = {
@@ -223,6 +224,23 @@ class RecheckTest(FeatureBranchTestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("-    return a / b if b else 0", self.sb.fake.last_call()["stdin"])
+
+    def test_a_gap_and_a_full_diff_too_large_together_are_refused(self) -> None:
+        self.review_then_fix()
+        # About 700 000 characters in each diff: under the limit alone, over it together.
+        self.sb.write("gros.py", "x = 1\n" * 100_000)
+
+        self.assert_refused([], "diff trop volumineux")
+
+    def test_a_failed_recheck_archives_nothing(self) -> None:
+        report = self.review_then_fix()
+        self.sb.fake.reply({**success(), "subtype": "error_max_budget_usd", "is_error": True}, 1)
+
+        result = self.sb.run("recheck")
+
+        self.assertEqual(result.returncode, INCOMPLETE, result.stderr)
+        self.assertEqual(result.stdout, "")
+        self.assertEqual(sorted(report.parent.glob("*.md")), [report])
 
     def test_a_malformed_report_is_refused(self) -> None:
         report = self.review_then_fix()
