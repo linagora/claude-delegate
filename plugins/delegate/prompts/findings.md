@@ -1,0 +1,7 @@
+- `findings` : un élément par problème, avec :
+  - `severity` : `bloquant` (casse en production, faille, perte de données), `important` (défaut réel à corriger avant la fusion) ou `mineur` (amélioration utile) ;
+  - `file` et `line` (`null` si le problème ne tient pas à une ligne) ;
+  - `problem` : le défaut, en une ou deux phrases ;
+  - `failure_scenario` : un scénario de défaillance concret (entrée, état, conséquence) ;
+  - `fix` : le correctif suggéré.
+- Si tu ne trouves rien, renvoie une liste `findings` vide : ne fabrique pas de problème.

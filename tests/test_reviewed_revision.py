@@ -145,6 +145,17 @@ class ReviewedRevisionTest(FeatureBranchTestCase):
         self.assertIn("rien à relire", result.stderr)
         self.assertEqual(self.sb.fake.calls(), [])
 
+    def test_changes_to_files_the_reviewer_may_not_read_alone_are_named(self) -> None:
+        self.sb.git("switch", "-q", "main")
+        self.sb.write(".env", "API_TOKEN=SECRET_VALUE\n")
+
+        result = self.sb.run("hostile-review", "main")
+
+        self.assertEqual(result.returncode, PREPARATION_FAILURE, result.stderr)
+        self.assertIn("exclus de la revue (.env)", result.stderr)
+        self.assertNotIn("SECRET_VALUE", result.stderr)
+        self.assertEqual(self.sb.fake.calls(), [])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -2,19 +2,23 @@
 
 Everything is exercised through the single agreed seam: the CLI run as a
 process, in real temporary git repositories, with the `claude` binary
-replaced by a recording fake (via CLAUDE_DELEGATE_BIN).
+replaced by a recording fake (via CLAUDE_DELEGATE_BIN), and `gh` by another
+placed first on the PATH. A pull request lives in a local bare repository
+serving as origin, which an insteadOf rule gives a GitHub URL.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 ROOT = Path(__file__).resolve().parent.parent
 PLUGIN = ROOT / "plugins" / "delegate"
@@ -98,6 +102,14 @@ def option(argv: List[str], name: str) -> str:
     return argv[argv.index(name) + 1]
 
 
+def recorded_calls(directory: Path) -> List[Any]:
+    """The calls a fake recorded in `directory`, oldest first."""
+    log = directory / "calls.jsonl"
+    if not log.exists():
+        return []
+    return [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+
+
 def report_path(stdout: str) -> Path:
     """The archived report announced on the first line of the CLI output."""
     first_line = stdout.partition("\n")[0]
@@ -147,10 +159,7 @@ class FakeClaude:
         (self.directory / "reply.json").write_text(json.dumps({"queue": replies}), encoding="utf-8")
 
     def calls(self) -> List[Dict[str, Any]]:
-        log = self.directory / "calls.jsonl"
-        if not log.exists():
-            return []
-        return [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+        return recorded_calls(self.directory)
 
     def last_call(self) -> Dict[str, Any]:
         calls = self.calls()
@@ -232,6 +241,37 @@ class Sandbox:
         )
 
 
+def interrupt_review(
+    sb: Sandbox, args: Sequence[str], signum: int, extra_env: Optional[Dict[str, str]] = None
+) -> Tuple[Dict[str, Any], int]:
+    """Run the CLI, send it `signum` once the (sleeping) fake reviewer is
+    called, and wait for it to exit: returns that reviewer call and the exit code."""
+    process = subprocess.Popen(
+        [sys.executable, str(BIN), *args],
+        cwd=sb.repo,
+        env={**sb.env(), **(extra_env or {})},
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        preexec_fn=_default_sigint,
+    )
+    try:
+        deadline = time.monotonic() + 15
+        while not sb.fake.calls() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        call = sb.fake.last_call()
+        process.send_signal(signum)
+        process.communicate(timeout=15)
+    finally:
+        process.kill()
+    return call, process.returncode
+
+
+def _default_sigint() -> None:
+    """A shell starts background jobs with SIGINT ignored, which the CLI would
+    inherit when the suite runs in the background: Ctrl+C is restored."""
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+
 class FeatureBranchTestCase(unittest.TestCase):
     """A sandbox whose `feature` branch changes app.py in one commit on top of `main`."""
 
@@ -242,3 +282,103 @@ class FeatureBranchTestCase(unittest.TestCase):
         self.sb.git("switch", "-q", "-c", "feature")
         self.sb.write("app.py", "def div(a, b):\n    return a / b if b else 0\n")
         self.sb.commit_all("feature change")
+
+
+_FAKE_GH_SCRIPT = '''#!{python}
+import json, sys
+from pathlib import Path
+
+here = Path({directory!r})
+with open(here / "calls.jsonl", "a", encoding="utf-8") as f:
+    f.write(json.dumps(sys.argv[1:]) + "\\n")
+reply = json.loads((here / "reply.json").read_text(encoding="utf-8"))
+sys.stdout.write(reply["stdout"])
+sys.stderr.write(reply["stderr"])
+sys.exit(reply["exit_code"])
+'''
+
+
+class FakeGh:
+    """Stand-in for `gh`, placed first on the PATH: records each call, replies with a canned result."""
+
+    def __init__(self, directory: Path) -> None:
+        directory.mkdir(parents=True)
+        self.directory = directory
+        path = directory / "gh"
+        path.write_text(_FAKE_GH_SCRIPT.format(python=sys.executable, directory=str(directory)), encoding="utf-8")
+        path.chmod(0o755)
+        self.reply({})
+
+    def reply(self, payload: Dict[str, Any]) -> None:
+        self._write(json.dumps(payload), "", 0)
+
+    def fail(self, stderr: str) -> None:
+        self._write("", stderr, 1)
+
+    def _write(self, stdout: str, stderr: str, exit_code: int) -> None:
+        reply = {"stdout": stdout, "stderr": stderr, "exit_code": exit_code}
+        (self.directory / "reply.json").write_text(json.dumps(reply), encoding="utf-8")
+
+    def calls(self) -> List[List[str]]:
+        return recorded_calls(self.directory)
+
+
+class PullRequestTestCase(unittest.TestCase):
+    """A repository whose origin looks like GitHub, holding pull request #7 from a contributor."""
+
+    NUMBER = "7"
+    URL = "https://github.com/acme/app.git"
+
+    def setUp(self) -> None:
+        self.sb = Sandbox()
+        self.addCleanup(self.sb.cleanup)
+        self.sb.init_repo()
+        self.origin = self.sb.root / "origin.git"
+        self.sb.git("init", "-q", "--bare", "-b", "main", str(self.origin), cwd=self.sb.root)
+        self.sb.git("config", f"url.{self.origin}.insteadOf", self.URL)
+        self.sb.git("remote", "add", "origin", self.URL)
+        self.sb.git("push", "-q", "origin", "main")
+        self.contributor = self.sb.root / "contributor"
+        self.sb.git("clone", "-q", str(self.origin), str(self.contributor), cwd=self.sb.root)
+        self.gh = FakeGh(self.sb.root / "gh-bin")
+        self.update_pull_request({"app.py": "def div(a, b):\n    return a / b if b else PR_CHANGE\n"})
+
+    def update_pull_request(self, files: Dict[str, str]) -> None:
+        """Commit `files` on top of origin's main in the contributor's clone and
+        publish them as refs/pull/7/head only, as from a fork: the repository
+        under review only gets them by fetching. gh then describes that head."""
+        self.head = self._publish_from_contributor(files, f"refs/pull/{self.NUMBER}/head")
+        self.gh.reply(self.metadata())
+
+    def move_target_branch(self, files: Dict[str, str]) -> None:
+        """Someone else merges `files` into main on the forge."""
+        self._publish_from_contributor(files, "refs/heads/main")
+
+    def _publish_from_contributor(self, files: Dict[str, str], ref: str) -> str:
+        clone = self.contributor
+        self.sb.git("fetch", "-q", "origin", cwd=clone)
+        self.sb.git("switch", "-q", "--detach", "origin/main", cwd=clone)
+        for name, content in files.items():
+            path = clone / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+        self.sb.git("add", "-A", cwd=clone)
+        self.sb.git("commit", "-q", "-m", "contributor work", cwd=clone)
+        self.sb.git("push", "-q", "-f", "origin", f"HEAD:{ref}", cwd=clone)
+        return self.sb.git("rev-parse", "HEAD", cwd=clone)
+
+    def metadata(self, **fields: Any) -> Dict[str, Any]:
+        return {
+            "title": "Gérer la division par zéro",
+            "body": "Cette PR renvoie PR_CHANGE quand b vaut zéro.",
+            "baseRefName": "main",
+            "headRefOid": self.head,
+            "url": f"https://github.com/acme/app/pull/{self.NUMBER}",
+            **fields,
+        }
+
+    def path_with_gh(self) -> str:
+        return f"{self.gh.directory}{os.pathsep}{os.environ['PATH']}"
+
+    def run_pr(self, *args: str) -> subprocess.CompletedProcess[str]:
+        return self.sb.run("pr-review", self.NUMBER, *args, extra_env={"PATH": self.path_with_gh()})

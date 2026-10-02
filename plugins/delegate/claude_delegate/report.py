@@ -4,39 +4,90 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import datetime
-from typing import Any, ClassVar, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from . import __version__
 from .delegate import Execution
-from .gitctx import HostileContext
+from .gitctx import HostileContext, PullRequestContext
 from .interpret import Finding, Review
 from .schemas import SEVERITIES
 
 
 @dataclass(frozen=True)
-class HostileReport:
-    KIND: ClassVar[str] = "hostile"
-    TITLE: ClassVar[str] = "Revue hostile"
+class Subject:
+    """What a report is about: its kind and title, and its own header rows and
+    companion fields."""
 
+    kind: str
+    #: Names the subject in report identifiers, such as hostile or pr-7.
+    slug: str
+    title: str
+    rows: List[Tuple[str, str]]
+    fields: Dict[str, Any]
+
+
+def hostile_subject(ctx: HostileContext) -> Subject:
+    return Subject(
+        kind="hostile",
+        slug="hostile",
+        title="Revue hostile",
+        rows=[
+            ("Base", f"{ctx.base} (merge-base {_short(ctx.merge_base)})"),
+            ("Révision relue", _short(ctx.reviewed_revision)),
+        ],
+        fields={
+            "base": ctx.base,
+            "merge_base": ctx.merge_base,
+            "reviewed_revision": ctx.reviewed_revision,
+        },
+    )
+
+
+def pr_subject(ctx: PullRequestContext) -> Subject:
+    pr = ctx.pull_request
+    return Subject(
+        kind="pr",
+        slug=f"pr-{pr.number}",
+        title="Revue de pull request",
+        rows=[
+            ("Pull request", f"#{pr.number} {pr.url}"),
+            ("Branche cible", pr.base),
+            # In full: DeepSeek reads the reviewed files at this commit.
+            ("Tête", pr.head),
+            ("Fichiers non relus", ", ".join(ctx.unreviewed) or "aucun"),
+        ],
+        fields={
+            "pr_number": pr.number,
+            "url": pr.url,
+            "base": pr.base,
+            "base_revision": ctx.base_revision,
+            "merge_base": ctx.merge_base,
+            "head": pr.head,
+            "unreviewed_files": ctx.unreviewed,
+        },
+    )
+
+
+@dataclass(frozen=True)
+class Report:
     id: str
     created_at: datetime
     repo: str
-    context: HostileContext
+    subject: Subject
     execution: Execution
     review: Review
 
     def markdown(self) -> str:
-        return _render(self.TITLE, self._header(), self.review)
+        return _render(self.subject.title, self._header(), self.review)
 
     def companion(self) -> Dict[str, Any]:
+        verdict = self.review.verdict
         return {
             "id": self.id,
-            "type": self.KIND,
+            "type": self.subject.kind,
             "created_at": self.created_at.isoformat(),
             "repo": self.repo,
-            "base": self.context.base,
-            "merge_base": self.context.merge_base,
-            "reviewed_revision": self.context.reviewed_revision,
+            **self.subject.fields,
             "requested_model": self.execution.requested_model,
             "model": self.review.model,
             "effort": self.execution.effort,
@@ -48,17 +99,17 @@ class HostileReport:
             "claude_code_version": self.execution.claude_code_version,
             "permission_denials": self.review.permission_denials,
             "summary": self.review.summary,
+            **({"verdict": verdict.decision, "verdict_reason": verdict.reason} if verdict else {}),
             "findings": [asdict(finding) for finding in self.review.findings],
         }
 
     def _header(self) -> List[Tuple[str, str]]:
         return [
             ("Identifiant", self.id),
-            ("Type", self.TITLE.lower()),
+            ("Type", self.subject.title.lower()),
             ("Date (UTC)", f"{self.created_at:%Y-%m-%d %H:%M:%S}"),
             ("Dépôt", self.repo),
-            ("Base", f"{self.context.base} (merge-base {_short(self.context.merge_base)})"),
-            ("Révision relue", _short(self.context.reviewed_revision)),
+            *self.subject.rows,
             ("Modèle", self.review.model),
             ("Effort", self.execution.effort),
             ("Tours", _unknown_if_none(self.review.num_turns, "inconnu")),
@@ -115,6 +166,8 @@ def _render(title: str, header: List[Tuple[str, str]], review: Review) -> str:
     lines = [f"# {title}", "", "| Champ | Valeur |", "|---|---|"]
     lines += [f"| {_cell(label)} | {_cell(value)} |" for label, value in header]
     lines += ["", "## Résumé", "", review.summary.strip(), ""]
+    if review.verdict:
+        lines += ["## Verdict", "", f"{review.verdict.decision} : {review.verdict.reason.strip()}", ""]
     for severity in SEVERITIES:
         lines += [f"## {severity.capitalize()}", ""]
         findings = [f for f in review.findings if f.severity == severity]

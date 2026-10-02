@@ -11,14 +11,24 @@ PROMPTS = Path(__file__).resolve().parent.parent / "prompts"
 
 
 def hostile_review(conventions: Optional[str]) -> str:
-    """The hostile review task, followed by the project's trusted conventions if any."""
-    task = (PROMPTS / "hostile-review.md").read_text(encoding="utf-8").rstrip()
+    return _review_prompt("hostile-review.md", conventions)
+
+
+def pr_review(conventions: Optional[str]) -> str:
+    return _review_prompt("pr-review.md", conventions)
+
+
+def selftest() -> str:
+    return (PROMPTS / "selftest.md").read_text(encoding="utf-8")
+
+
+def _review_prompt(task_file: str, conventions: Optional[str]) -> str:
+    """A review task, in which every review shares the format of its findings,
+    followed by the project's trusted conventions if any."""
+    findings = (PROMPTS / "findings.md").read_text(encoding="utf-8").rstrip()
+    task = (PROMPTS / task_file).read_text(encoding="utf-8").replace("{findings}", findings).rstrip()
     if not conventions:
         return task + "\n"
     # replace, not format: the conventions may contain braces.
     section = (PROMPTS / "conventions.md").read_text(encoding="utf-8").replace("{conventions}", conventions.strip())
     return f"{task}\n\n{section}"
-
-
-def selftest() -> str:
-    return (PROMPTS / "selftest.md").read_text(encoding="utf-8")

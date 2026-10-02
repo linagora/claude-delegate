@@ -82,6 +82,19 @@ class PluginCommandsTest(unittest.TestCase):
             [f"{PLUGIN_ROOT_VAR}/bin/claude-delegate hostile-review $ARGUMENTS"],
         )
 
+    def test_the_pr_review_command_checks_findings_at_the_reviewed_head_and_publishes_nothing(self) -> None:
+        _, body = parse_command(PLUGIN / "commands" / "pr-review.md")
+
+        self.assertEqual(
+            shell_invocations(body),
+            [f"{PLUGIN_ROOT_VAR}/bin/claude-delegate pr-review $ARGUMENTS"],
+        )
+        self.assertIn("git show", body)
+        self.assertIn("aucun checkout", body)
+        self.assertIn("« Tête »", body)
+        self.assertIn("« Fichiers non relus »", body)
+        self.assertIn("Ne publie rien", body)
+
     def test_handoff_writes_a_dated_brief_without_shell_and_points_to_a_spec_session(self) -> None:
         _, body = parse_command(PLUGIN / "commands" / "handoff.md")
 

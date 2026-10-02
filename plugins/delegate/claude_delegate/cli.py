@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import signal
 import sys
 from datetime import datetime, timezone
@@ -23,12 +24,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     hostile = commands.add_parser("hostile-review", help="Revue hostile des changements en cours.")
     hostile.add_argument("base", nargs="?", help="Branche de base (défaut : branche par défaut d'origin).")
-    hostile.add_argument(
-        "--model",
-        choices=delegate.MODELS,
-        default=delegate.DEFAULT_MODEL,
-        help=f"Modèle du relecteur (défaut : {delegate.DEFAULT_MODEL}).",
-    )
+    _add_model_option(hostile)
+    pull_request = commands.add_parser("pr-review", help="Revue d'une pull request GitHub, sur son propre code.")
+    pull_request.add_argument("number", type=_pull_request_number, help="Numéro de la pull request.")
+    _add_model_option(pull_request)
     commands.add_parser(
         "selftest",
         help="Vérifie sur le vrai Claude Code que le relecteur reste isolé (Haiku, quelques centimes).",
@@ -38,10 +37,27 @@ def main(argv: Optional[List[str]] = None) -> int:
     try:
         if args.command == "selftest":
             return _selftest()
+        if args.command == "pr-review":
+            return _pr_review(args.number, args.model)
         return _hostile_review(args.base, args.model)
     except DelegateError as error:
         print(f"claude-delegate : {error}", file=sys.stderr)
         return error.exit_code
+
+
+def _add_model_option(command: argparse.ArgumentParser) -> None:
+    command.add_argument(
+        "--model",
+        choices=delegate.MODELS,
+        default=delegate.DEFAULT_MODEL,
+        help=f"Modèle du relecteur (défaut : {delegate.DEFAULT_MODEL}).",
+    )
+
+
+def _pull_request_number(text: str) -> int:
+    if not re.fullmatch(r"[1-9][0-9]*", text):
+        raise argparse.ArgumentTypeError(f"numéro de pull request invalide : {text!r}")
+    return int(text)
 
 
 def _hostile_review(base: Optional[str], model: str) -> int:
@@ -54,18 +70,39 @@ def _hostile_review(base: Optional[str], model: str) -> int:
         "Revue hostile du diff fourni sur l'entrée standard.",
         model=model,
     )
+    review = interpret.read_review(done)
+    return _publish(archive.repo_key(ctx.root, ctx.origin_url), report.hostile_subject(ctx), execution, review)
+
+
+def _pr_review(number: int, model: str) -> int:
+    ctx = gitctx.pull_request_context(Path.cwd(), number)
+    with gitctx.pull_request_worktree(ctx.root, ctx.pull_request.head) as tree:
+        done, execution = delegate.launch(
+            tree,
+            ctx.reviewer_input(),
+            schemas.PR_REVIEW,
+            prompts.pr_review(ctx.conventions),
+            "Revue de la pull request fournie sur l'entrée standard.",
+            model=model,
+        )
+    review = interpret.read_pr_review(done)
+    return _publish(archive.repo_key(ctx.root, ctx.origin_url), report.pr_subject(ctx), execution, review)
+
+
+def _publish(repo: str, subject: report.Subject, execution: delegate.Execution, review: interpret.Review) -> int:
+    """Archive the report, then print its path and its Markdown for the session."""
     created_at = datetime.now(timezone.utc)
-    hostile = report.HostileReport(
-        id=archive.new_id(report.HostileReport.KIND, created_at),
+    review_report = report.Report(
+        id=archive.new_id(subject.slug, created_at),
         created_at=created_at,
-        repo=archive.repo_key(ctx.root, ctx.origin_url),
-        context=ctx,
+        repo=repo,
+        subject=subject,
         execution=execution,
-        review=interpret.read_review(done),
+        review=review,
     )
-    markdown = hostile.markdown()
+    markdown = review_report.markdown()
     try:
-        path = archive.save(archive.state_dir() / hostile.repo, hostile.id, markdown, hostile.companion())
+        path = archive.save(archive.state_dir() / repo, review_report.id, markdown, review_report.companion())
     except OSError as error:
         raise DelegateError(f"impossible d'archiver le rapport : {error}") from None
     sys.stdout.write(f"Rapport : {path}\n\n{markdown}")

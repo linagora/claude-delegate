@@ -32,6 +32,19 @@ HOSTILE_REVIEW: Dict[str, Any] = {
     "required": ["summary", "findings"],
 }
 
+VERDICTS = ["APPROVE", "REQUEST_CHANGES"]
+
+PR_REVIEW: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "summary": {"type": "string"},
+        "verdict": {"type": "string", "enum": VERDICTS},
+        "verdict_reason": {"type": "string"},
+        "findings": {"type": "array", "items": FINDING},
+    },
+    "required": ["summary", "verdict", "verdict_reason", "findings"],
+}
+
 
 #: What the selftest's reviewer reports: what it could read, and the project
 #: codeword it believes its instructions give.
@@ -53,6 +66,15 @@ def is_review(value: Any) -> bool:
         return False
     findings = value.get("findings")
     return isinstance(findings, list) and all(_is_finding(f) for f in findings)
+
+
+def is_pr_review(value: Any) -> bool:
+    """Whether a structured output honours PR_REVIEW."""
+    return (
+        is_review(value)
+        and value.get("verdict") in VERDICTS
+        and isinstance(value.get("verdict_reason"), str)
+    )
 
 
 def _is_finding(value: Any) -> bool:
