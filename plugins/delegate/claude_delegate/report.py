@@ -8,8 +8,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from . import __version__
 from .delegate import Execution
-from .gitctx import HostileContext, PullRequestContext
-from .interpret import Finding, Review
+from .gitctx import HostileContext, PullRequestContext, RecheckContext
+from .interpret import Finding, Review, Status
 from .schemas import SEVERITIES
 
 
@@ -68,6 +68,28 @@ def pr_subject(ctx: PullRequestContext) -> Subject:
     )
 
 
+def recheck_subject(original_id: str, ctx: RecheckContext) -> Subject:
+    current = ctx.current
+    return Subject(
+        kind="recheck",
+        slug="recheck",
+        title="Re-revue",
+        rows=[
+            ("Revue d'origine", original_id),
+            ("Base", f"{current.base} (merge-base {_short(current.merge_base)})"),
+            ("Révision d'origine", _short(ctx.original_revision)),
+            ("Révision relue", _short(current.reviewed_revision)),
+        ],
+        fields={
+            "original": original_id,
+            "base": current.base,
+            "merge_base": current.merge_base,
+            "original_revision": ctx.original_revision,
+            "reviewed_revision": current.reviewed_revision,
+        },
+    )
+
+
 @dataclass(frozen=True)
 class Report:
     id: str
@@ -81,7 +103,7 @@ class Report:
         return _render(self.subject.title, self._header(), self.review)
 
     def companion(self) -> Dict[str, Any]:
-        verdict = self.review.verdict
+        verdict, statuses = self.review.verdict, self.review.statuses
         return {
             "id": self.id,
             "type": self.subject.kind,
@@ -100,6 +122,7 @@ class Report:
             "permission_denials": self.review.permission_denials,
             "summary": self.review.summary,
             **({"verdict": verdict.decision, "verdict_reason": verdict.reason} if verdict else {}),
+            **({"statuses": [_status_record(status) for status in statuses]} if statuses is not None else {}),
             "findings": [asdict(finding) for finding in self.review.findings],
         }
 
@@ -168,11 +191,26 @@ def _render(title: str, header: List[Tuple[str, str]], review: Review) -> str:
     lines += ["", "## Résumé", "", review.summary.strip(), ""]
     if review.verdict:
         lines += ["## Verdict", "", f"{review.verdict.decision} : {review.verdict.reason.strip()}", ""]
+    if review.statuses is not None:
+        lines += ["## Constats d'origine", ""] + _statuses(review.statuses)
     for severity in SEVERITIES:
         lines += [f"## {severity.capitalize()}", ""]
         findings = [f for f in review.findings if f.severity == severity]
         lines += _findings(findings) if findings else ["Rien à signaler.", ""]
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _statuses(statuses: List[Status]) -> List[str]:
+    lines = [
+        f"- **{s.finding.id}** · {s.finding.location} ({s.finding.severity}) : "
+        f"**{s.status}**. {s.justification.strip()}"
+        for s in statuses
+    ]
+    return (lines or ["Aucun constat bloquant ou important à vérifier."]) + [""]
+
+
+def _status_record(status: Status) -> Dict[str, str]:
+    return {"id": status.finding.id, "status": status.status, "justification": status.justification}
 
 
 def _findings(findings: List[Finding]) -> List[str]:

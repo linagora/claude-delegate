@@ -55,6 +55,16 @@ class Verdict:
 
 
 @dataclass(frozen=True)
+class Status:
+    """How a recheck rules on one finding of the original review."""
+
+    finding: Finding
+    #: traité, non traité or mal traité.
+    status: str
+    justification: str
+
+
+@dataclass(frozen=True)
 class Review:
     summary: str
     findings: List[Finding]
@@ -66,6 +76,8 @@ class Review:
     permission_denials: Optional[List[str]]
     #: Only a pull request review has one.
     verdict: Optional[Verdict] = None
+    #: Only a recheck has them.
+    statuses: Optional[List[Status]] = None
 
 
 def read_result(done: "subprocess.CompletedProcess[str]") -> Dict[str, Any]:
@@ -92,6 +104,17 @@ def read_pr_review(done: "subprocess.CompletedProcess[str]") -> Review:
     structured = _structured_output(payload, schemas.is_pr_review)
     verdict = Verdict(structured["verdict"], structured["verdict_reason"])
     return replace(_review(payload, structured), verdict=verdict)
+
+
+def read_recheck(done: "subprocess.CompletedProcess[str]", ruled: List[Finding], first_number: int) -> Review:
+    """A recheck ruling on each of the `ruled` findings; its new findings are
+    numbered from `first_number`, after the original ones."""
+    payload = read_result(done)
+    ids = [finding.id for finding in ruled]
+    structured = _structured_output(payload, lambda value: schemas.is_recheck(value, ids))
+    rulings = structured["statuses"]
+    statuses = [Status(f, rulings[f.id]["status"], rulings[f.id]["justification"]) for f in ruled]
+    return replace(_review(payload, structured, first_number), statuses=statuses)
 
 
 def _structured_output(payload: Dict[str, Any], honours: Callable[[Any], bool]) -> Dict[str, Any]:

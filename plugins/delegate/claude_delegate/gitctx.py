@@ -78,6 +78,16 @@ class PullRequestContext:
         )
 
 
+@dataclass(frozen=True)
+class RecheckContext:
+    #: The current state, prepared as a hostile review prepares it.
+    current: HostileContext
+    #: The revision the original review read.
+    original_revision: str
+    #: What changed since: from the original revision to the current one.
+    gap: str
+
+
 def hostile_context(cwd: Path, base: Optional[str]) -> HostileContext:
     root = repository(cwd)
     if _git_or_none(root, "rev-parse", "--verify", "--quiet", "HEAD^{commit}") is None:
@@ -99,6 +109,22 @@ def hostile_context(cwd: Path, base: Optional[str]) -> HostileContext:
         diff=_reviewable_diff(root, merge_base, reviewed_revision, f"aucun changement depuis {base}"),
         conventions=conventions_text,
     )
+
+
+def recheck_context(root: Path, base: str, original_revision: str) -> RecheckContext:
+    if _git_or_none(root, "rev-parse", "--verify", "--quiet", f"{original_revision}^{{commit}}") is None:
+        raise DelegateError(
+            f"révision relue par la revue d'origine introuvable ({original_revision[:12]}), sans doute purgée "
+            "par git : lance une revue complète avec /delegate:hostile-review",
+            EXIT_PREPARATION,
+        )
+    current = hostile_context(root, base)
+    gap = _reviewable_diff(
+        root, original_revision, current.reviewed_revision, "aucun changement depuis la revue d'origine"
+    )
+    if len(gap) + len(current.diff) > MAX_DIFF_CHARS:
+        raise _too_large(len(gap) + len(current.diff))
+    return RecheckContext(current=current, original_revision=original_revision, gap=gap)
 
 
 def pull_request_context(cwd: Path, number: int) -> PullRequestContext:

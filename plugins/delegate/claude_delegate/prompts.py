@@ -18,6 +18,10 @@ def pr_review(conventions: Optional[str]) -> str:
     return _review_prompt("pr-review.md", conventions)
 
 
+def recheck(conventions: Optional[str]) -> str:
+    return _review_prompt("recheck.md", conventions)
+
+
 def selftest() -> str:
     return (PROMPTS / "selftest.md").read_text(encoding="utf-8")
 
