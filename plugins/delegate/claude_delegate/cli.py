@@ -23,12 +23,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     hostile = commands.add_parser("hostile-review", help="Revue hostile des changements en cours.")
     hostile.add_argument("base", nargs="?", help="Branche de base (défaut : branche par défaut d'origin).")
-    hostile.add_argument(
-        "--model",
-        choices=delegate.MODELS,
-        default=delegate.DEFAULT_MODEL,
-        help=f"Modèle du relecteur (défaut : {delegate.DEFAULT_MODEL}).",
-    )
+    _add_model_option(hostile)
     commands.add_parser(
         "selftest",
         help="Vérifie sur le vrai Claude Code que le relecteur reste isolé (Haiku, quelques centimes).",
@@ -42,6 +37,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     except DelegateError as error:
         print(f"claude-delegate : {error}", file=sys.stderr)
         return error.exit_code
+
+
+def _add_model_option(command: argparse.ArgumentParser) -> None:
+    command.add_argument(
+        "--model",
+        choices=delegate.MODELS,
+        default=delegate.DEFAULT_MODEL,
+        help=f"Modèle du relecteur (défaut : {delegate.DEFAULT_MODEL}).",
+    )
 
 
 def _hostile_review(base: Optional[str], model: str) -> int:
