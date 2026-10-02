@@ -82,7 +82,6 @@ class PluginCommandsTest(unittest.TestCase):
             [f"{PLUGIN_ROOT_VAR}/bin/claude-delegate hostile-review $ARGUMENTS"],
         )
 
-
     def test_handoff_writes_a_dated_brief_without_shell_and_points_to_a_spec_session(self) -> None:
         _, body = parse_command(PLUGIN / "commands" / "handoff.md")
 

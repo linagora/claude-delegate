@@ -9,6 +9,7 @@ from typing import Optional
 #: prompt files from its own location.
 PROMPTS = Path(__file__).resolve().parent.parent / "prompts"
 
+
 def hostile_review(conventions: Optional[str]) -> str:
     """The hostile review task, followed by the project's trusted conventions if any."""
     task = (PROMPTS / "hostile-review.md").read_text(encoding="utf-8").rstrip()

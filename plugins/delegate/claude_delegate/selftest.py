@@ -203,7 +203,6 @@ def _read_status(refused: bool, leaked: bool) -> str:
     return OK if refused else INCONCLUSIVE
 
 
-
 def render(outcome: Outcome) -> str:
     lines = [
         "# Selftest de l'isolation du relecteur",
