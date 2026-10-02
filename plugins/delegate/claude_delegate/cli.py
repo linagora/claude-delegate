@@ -32,7 +32,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
 def _hostile_review(base: Optional[str]) -> int:
     ctx = gitctx.hostile_context(Path.cwd(), base)
-    done = delegate.launch(
+    done, execution = delegate.launch(
         ctx.root,
         ctx.diff,
         schemas.HOSTILE_REVIEW,
@@ -45,6 +45,7 @@ def _hostile_review(base: Optional[str]) -> int:
         created_at=created_at,
         repo=archive.repo_key(ctx.root, ctx.origin_url),
         context=ctx,
+        execution=execution,
         review=interpret.read_review(done),
     )
     markdown = hostile.markdown()

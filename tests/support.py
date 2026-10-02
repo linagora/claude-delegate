@@ -35,6 +35,9 @@ from pathlib import Path
 
 here = Path({directory!r})
 argv = sys.argv[1:]
+if argv == ["--version"]:
+    print("9.9.9 (Claude Code)")
+    sys.exit(0)
 prompt_file = None
 if "--append-system-prompt-file" in argv:
     prompt_file = Path(argv[argv.index("--append-system-prompt-file") + 1])

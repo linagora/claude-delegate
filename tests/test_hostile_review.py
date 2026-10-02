@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import unittest
 from typing import List
 
-from tests.support import SAMPLE_FINDING, FeatureBranchTestCase, report_path, success
+from tests.support import PLUGIN, SAMPLE_FINDING, FeatureBranchTestCase, report_path, success
 
 
 def option(argv: List[str], name: str) -> str:
@@ -186,6 +187,39 @@ class HostileReviewTest(FeatureBranchTestCase):
         self.assertIn(f"| Base | main (merge-base {merge_base[:12]}) |", report)
         self.assertRegex(report, r"\| Identifiant \| \d{8}T\d{6}Z-hostile-[0-9a-f]{6} \|")
         self.assertRegex(report, r"\| Date \(UTC\) \| \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \|")
+
+    def test_report_header_says_how_the_review_ran(self) -> None:
+        denial = {"tool_name": "Read", "tool_use_id": "t1", "tool_input": {"file_path": "/repo/.env"}}
+        self.sb.fake.reply(
+            {
+                **success(),
+                "num_turns": 7,
+                "total_cost_usd": 1.234,
+                "duration_ms": 65_000,
+                "permission_denials": [denial],
+            }
+        )
+        plugin = json.loads((PLUGIN / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+
+        result = self.sb.run("hostile-review", "main")
+
+        prompt = self.sb.fake.last_call()["system_prompt"] or ""
+        prompt_sha = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+        for row in [
+            "| Type | revue hostile |",
+            "| Effort | high |",
+            "| Tours | 7 |",
+            "| Coût estimé | 1,23 $ |",
+            "| Durée | 1 min 05 s |",
+            f"| Prompt | {prompt_sha[:12]} |",
+            f"| Versions | claude-delegate {plugin['version']}, Claude Code 9.9.9 |",
+            "| Permissions refusées | Read /repo/.env |",
+        ]:
+            self.assertIn(row, result.stdout)
+        companion = json.loads(report_path(result.stdout).with_suffix(".json").read_text(encoding="utf-8"))
+        self.assertEqual(companion["prompt_sha256"], prompt_sha)
+        self.assertEqual(companion["claude_code_version"], "9.9.9")
+        self.assertEqual(companion["permission_denials"], ["Read /repo/.env"])
 
     def test_reports_are_filed_under_the_origin_repository_without_credentials(self) -> None:
         expected = self.sb.state / "claude-delegate" / "github.com" / "linagora" / "claude-delegate"

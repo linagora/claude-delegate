@@ -43,6 +43,10 @@ class Review:
     summary: str
     findings: List[Finding]
     model: str
+    num_turns: int
+    cost_usd: Optional[float]
+    duration_s: Optional[float]
+    permission_denials: List[str]
 
 
 def read_review(done: "subprocess.CompletedProcess[str]") -> Review:
@@ -60,11 +64,26 @@ def read_review(done: "subprocess.CompletedProcess[str]") -> Review:
         raise DelegateError(
             "la sortie structurée du délégué est absente ou non conforme au schéma", EXIT_INVALID_OUTPUT
         )
+    cost = payload.get("total_cost_usd")
+    duration = payload.get("duration_ms")
     return Review(
         summary=structured["summary"],
         findings=_numbered(structured["findings"]),
         model=_model(payload),
+        num_turns=int(payload.get("num_turns") or 0),
+        cost_usd=float(cost) if isinstance(cost, (int, float)) else None,
+        duration_s=duration / 1000 if isinstance(duration, (int, float)) else None,
+        permission_denials=[
+            _denial(d) for d in payload.get("permission_denials") or [] if isinstance(d, dict)
+        ],
     )
+
+
+def _denial(denial: Dict[str, Any]) -> str:
+    """`Read /repo/.env`: the refused tool and what it targeted."""
+    target = denial.get("tool_input") or {}
+    what = next((target[k] for k in ("file_path", "path", "pattern", "command") if target.get(k)), "")
+    return f"{denial.get('tool_name', '?')} {what}".strip()
 
 
 def _raise_on_failure(payload: Dict[str, Any], returncode: int) -> None:

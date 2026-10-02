@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
+from . import __version__
+from .delegate import Execution
 from .gitctx import HostileContext
 from .interpret import Finding, Review
 from .schemas import SEVERITIES
@@ -17,6 +19,7 @@ class HostileReport:
     created_at: datetime
     repo: str
     context: HostileContext
+    execution: Execution
     review: Review
 
     def markdown(self) -> str:
@@ -31,7 +34,16 @@ class HostileReport:
             "base": self.context.base,
             "merge_base": self.context.merge_base,
             "reviewed_revision": self.context.reviewed_revision,
+            "requested_model": self.execution.model,
             "model": self.review.model,
+            "effort": self.execution.effort,
+            "num_turns": self.review.num_turns,
+            "cost_usd": self.review.cost_usd,
+            "duration_s": self.review.duration_s,
+            "prompt_sha256": self.execution.prompt_sha256,
+            "plugin_version": __version__,
+            "claude_code_version": self.execution.claude_code_version,
+            "permission_denials": self.review.permission_denials,
             "summary": self.review.summary,
             "findings": [asdict(finding) for finding in self.review.findings],
         }
@@ -39,17 +51,36 @@ class HostileReport:
     def _header(self) -> List[Tuple[str, str]]:
         return [
             ("Identifiant", self.id),
+            ("Type", "revue hostile"),
             ("Date (UTC)", f"{self.created_at:%Y-%m-%d %H:%M:%S}"),
             ("Dépôt", self.repo),
             ("Base", f"{self.context.base} (merge-base {_short(self.context.merge_base)})"),
             ("Révision relue", _short(self.context.reviewed_revision)),
             ("Modèle", self.review.model),
+            ("Effort", self.execution.effort),
+            ("Tours", str(self.review.num_turns)),
+            ("Coût estimé", _money(self.review.cost_usd)),
+            ("Durée", _duration(self.review.duration_s)),
+            ("Prompt", _short(self.execution.prompt_sha256)),
+            ("Versions", f"claude-delegate {__version__}, Claude Code {self.execution.claude_code_version}"),
+            ("Permissions refusées", "; ".join(self.review.permission_denials) or "aucune"),
         ]
 
 
-def _short(revision: str) -> str:
-    """Abbreviated commit id, as shown in report headers."""
-    return revision[:12]
+def _short(digest: str) -> str:
+    """Abbreviated commit id or hash, as shown in report headers."""
+    return digest[:12]
+
+
+def _money(usd: Optional[float]) -> str:
+    return "inconnu" if usd is None else f"{usd:.2f} $".replace(".", ",")
+
+
+def _duration(seconds: Optional[float]) -> str:
+    if seconds is None:
+        return "inconnue"
+    total = round(seconds)
+    return f"{total} s" if total < 60 else f"{total // 60} min {total % 60:02d} s"
 
 
 def _render(title: str, header: List[Tuple[str, str]], review: Review) -> str:

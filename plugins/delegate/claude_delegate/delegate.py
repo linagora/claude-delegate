@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 from . import policy
 from .errors import DelegateError
@@ -22,21 +24,44 @@ DENIED_READS = [f"Read({path})" for path in policy.DENIED_PATHS]
 #: the DeepSeek ANTHROPIC_* settings, CLAUDE_CODE_* tuning or tokens, stays out.
 PASSED_ENV = ("HOME", "USER", "LOGNAME", "PATH", "LANG", "TERM", "TMPDIR")
 
-MODEL = "opus"
+#: The models a review may use; Opus unless the user asks for Sonnet.
+MODELS = ("opus", "sonnet")
+DEFAULT_MODEL = "opus"
 EFFORT = "high"
 #: Bounds on what one review may consume from the user's quota.
 MAX_TURNS = 30
 MAX_BUDGET_USD = 5
 
 
+@dataclass(frozen=True)
+class Execution:
+    """How the reviewer was run, as recorded in the report."""
+
+    model: str
+    effort: str
+    prompt_sha256: str
+    claude_code_version: str
+
+
 def launch(
-    root: Path, task_input: str, schema: Dict[str, Any], prompt_file: Path, instruction: str
-) -> "subprocess.CompletedProcess[str]":
-    """Run the reviewer in `root` on `task_input` and return its raw result."""
+    root: Path,
+    task_input: str,
+    schema: Dict[str, Any],
+    prompt_file: Path,
+    instruction: str,
+    model: str = DEFAULT_MODEL,
+) -> Tuple["subprocess.CompletedProcess[str]", Execution]:
+    """Run the reviewer in `root` on `task_input`; return its raw result and how it ran."""
     binary = resolve_binary()
+    execution = Execution(
+        model=model,
+        effort=EFFORT,
+        prompt_sha256=hashlib.sha256(prompt_file.read_bytes()).hexdigest(),
+        claude_code_version=claude_code_version(binary),
+    )
     try:
-        return subprocess.run(
-            _command(binary, schema, prompt_file, instruction),
+        done = subprocess.run(
+            _command(binary, model, schema, prompt_file, instruction),
             input=task_input,
             cwd=root,
             env=_environment(),
@@ -46,6 +71,24 @@ def launch(
         )
     except OSError as error:
         raise DelegateError(f"binaire claude introuvable ou non exécutable : {binary} ({error.strerror})") from None
+    return done, execution
+
+
+def claude_code_version(binary: str) -> str:
+    """`2.1.287` from `claude --version`, or "inconnue"."""
+    try:
+        done = subprocess.run(
+            [binary, "--version"],
+            env=_environment(),
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return "inconnue"
+    words = done.stdout.split()
+    return words[0] if done.returncode == 0 and words else "inconnue"
 
 
 def resolve_binary() -> str:
@@ -84,7 +127,9 @@ def _environment() -> Dict[str, str]:
     return env
 
 
-def _command(binary: str, schema: Dict[str, Any], prompt_file: Path, instruction: str) -> List[str]:
+def _command(
+    binary: str, model: str, schema: Dict[str, Any], prompt_file: Path, instruction: str
+) -> List[str]:
     """The isolation contract, validated against a booby-trapped project (probe V1).
 
     --restricted ignores user, project and local settings files (env blocks,
@@ -104,7 +149,7 @@ def _command(binary: str, schema: Dict[str, Any], prompt_file: Path, instruction
         "--settings",
         json.dumps({"permissions": {"deny": DENIED_READS}}),
         "--model",
-        MODEL,
+        model,
         "--effort",
         EFFORT,
         "--max-turns",
