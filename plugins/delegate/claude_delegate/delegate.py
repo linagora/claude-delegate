@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 from . import policy
-from .errors import DelegateError
+from .errors import EXIT_PREPARATION, DelegateError
 
 #: The plugin's prompts. ${CLAUDE_PLUGIN_ROOT} is not exported to the shell, so
 #: the CLI finds them from its own location.
@@ -70,7 +70,9 @@ def launch(
             errors="replace",
         )
     except OSError as error:
-        raise DelegateError(f"binaire claude introuvable ou non exécutable : {binary} ({error.strerror})") from None
+        raise DelegateError(
+            f"binaire claude introuvable ou non exécutable : {binary} ({error.strerror})", EXIT_PREPARATION
+        ) from None
     return done, execution
 
 
@@ -104,7 +106,9 @@ def resolve_binary() -> str:
         candidate = Path(directory) / "claude"
         if directory and _is_executable(candidate) and not _is_cmux_shim(candidate):
             return str(candidate)
-    raise DelegateError("binaire claude introuvable : installez Claude Code ou définissez CLAUDE_DELEGATE_BIN")
+    raise DelegateError(
+        "binaire claude introuvable : installez Claude Code ou définissez CLAUDE_DELEGATE_BIN", EXIT_PREPARATION
+    )
 
 
 def _is_executable(path: Path) -> bool:
