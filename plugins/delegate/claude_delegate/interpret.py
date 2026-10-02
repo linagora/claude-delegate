@@ -6,7 +6,7 @@ import json
 import re
 import subprocess
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from . import schemas
 from .errors import EXIT_INCOMPLETE, EXIT_INVALID_OUTPUT, EXIT_QUOTA, DelegateError
@@ -75,9 +75,17 @@ def read_result(done: "subprocess.CompletedProcess[str]") -> Dict[str, Any]:
 
 def read_review(done: "subprocess.CompletedProcess[str]") -> Review:
     payload = read_result(done)
+    return _review(payload, _structured_output(payload, schemas.is_review))
+
+
+def _structured_output(payload: Dict[str, Any], honours: Callable[[Any], bool]) -> Dict[str, Any]:
     structured = payload.get("structured_output")
-    if not isinstance(structured, dict) or not schemas.is_review(structured):
+    if not isinstance(structured, dict) or not honours(structured):
         raise DelegateError(_INVALID_OUTPUT, EXIT_INVALID_OUTPUT)
+    return structured
+
+
+def _review(payload: Dict[str, Any], structured: Dict[str, Any]) -> Review:
     cost = payload.get("total_cost_usd")
     duration = payload.get("duration_ms")
     refused = refusals(payload)
