@@ -120,7 +120,8 @@ def recheck_context(root: Path, base: str, original_revision: str) -> RecheckCon
         )
     merge_base = _merge_base(root, base)
     reviewed_revision = _freeze_working_tree(root)
-    diff = _reviewable_diff(root, merge_base, reviewed_revision, f"aucun changement depuis {base}")
+    # Possibly empty: fixes may undo the whole change, findings still get ruled.
+    diff = _diff(root, merge_base, reviewed_revision)
     gap = _reviewable_diff(root, original_revision, reviewed_revision, "aucun changement depuis la revue d'origine")
     size = len(gap) + len(diff)
     if size > MAX_DIFF_CHARS:
@@ -234,10 +235,18 @@ def _commit(root: Path, revision: str) -> Optional[str]:
     return _git_or_none(root, "rev-parse", "--verify", "--quiet", f"{revision}^{{commit}}")
 
 
-def _reviewable_diff(root: Path, start: str, end: str, empty_reason: str) -> str:
-    """The diff from `start` to `end` that the reviewer receives, without denied
-    files; `empty_reason` says why there is nothing to review when it is empty."""
+def _diff(root: Path, start: str, end: str) -> str:
+    """The diff from `start` to `end` that the reviewer receives, without denied files."""
     diff = git(root, "diff", "--no-color", "--no-ext-diff", start, end, "--", ".", *_DENIED, strip=False)
+    if len(diff) > MAX_DIFF_CHARS:
+        raise _too_large(len(diff))
+    return diff
+
+
+def _reviewable_diff(root: Path, start: str, end: str, empty_reason: str) -> str:
+    """The diff from `start` to `end`, which must hold something to review:
+    `empty_reason` says why it does not."""
+    diff = _diff(root, start, end)
     if not diff.strip():
         unreviewed = _unreviewed_changes(root, start, end)
         if unreviewed:
@@ -247,8 +256,6 @@ def _reviewable_diff(root: Path, start: str, end: str, empty_reason: str) -> str
                 EXIT_PREPARATION,
             )
         raise DelegateError(f"rien à relire : {empty_reason}", EXIT_PREPARATION)
-    if len(diff) > MAX_DIFF_CHARS:
-        raise _too_large(len(diff))
     return diff
 
 

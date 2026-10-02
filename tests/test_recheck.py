@@ -194,6 +194,16 @@ class RecheckTest(FeatureBranchTestCase):
 
         self.assert_refused([], "aucun changement depuis la revue d'origine")
 
+    def test_fixes_that_undo_the_whole_change_are_still_ruled_on(self) -> None:
+        self.review()
+        self.sb.write("app.py", "def div(a, b):\n    return a / b\n")
+        self.sb.commit_all("undo the change")
+
+        result = self.sb.run("recheck")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("-    return a / b if b else 0", self.sb.fake.last_call()["stdin"])
+
     def test_a_malformed_report_is_refused(self) -> None:
         report = self.review_then_fix()
         self.edit_companion(report, reviewed_revision="--output=/tmp/x")
