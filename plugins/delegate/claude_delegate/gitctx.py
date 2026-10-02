@@ -75,7 +75,10 @@ def default_base(root: Path) -> str:
 
 
 def origin_url(root: Path) -> Optional[str]:
-    return _git_or_none(root, "remote", "get-url", "origin")
+    """origin's URL as configured: unlike `git remote get-url`, before any
+    insteadOf rule rewrites it to a mirror or a local path."""
+    urls = _git_or_none(root, "config", "--get-all", "remote.origin.url")
+    return urls.splitlines()[0] if urls else None
 
 
 def git(cwd: Path, *args: str, strip: bool = True, env: Optional[Dict[str, str]] = None) -> str:
