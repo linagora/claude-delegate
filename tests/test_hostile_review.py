@@ -240,6 +240,22 @@ class HostileReviewTest(FeatureBranchTestCase):
         for field in ("num_turns", "cost_usd", "duration_s", "permission_denials", "claude_code_version"):
             self.assertIsNone(companion[field], field)
 
+    def test_malformed_run_details_do_not_crash_the_review(self) -> None:
+        self.sb.fake.reply(
+            {
+                **success(),
+                "num_turns": "abc",
+                "total_cost_usd": "cher",
+                "modelUsage": {"claude-opus-5-5": {"costUSD": None}, "claude-haiku-4-5": "oops"},
+                "permission_denials": [{"tool_name": "Read", "tool_input": "/repo/.env"}, "oops"],
+            }
+        )
+
+        result = self.sb.run("hostile-review", "main")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("| Permissions refusées | Read /repo/.env |", result.stdout)
+
     def test_sonnet_can_be_requested_and_other_models_are_refused(self) -> None:
         self.sb.run("hostile-review", "main", "--model", "sonnet")
 

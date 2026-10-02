@@ -91,8 +91,11 @@ def _int_or_none(value: Any) -> Optional[int]:
 
 def _denial(denial: Dict[str, Any]) -> str:
     """`Read /repo/.env`: the refused tool and what it targeted."""
-    target = denial.get("tool_input") or {}
-    what = next((target[k] for k in ("file_path", "path", "pattern", "command") if target.get(k)), "")
+    target = denial.get("tool_input")
+    if isinstance(target, dict):
+        what = next((str(target[k]) for k in ("file_path", "path", "pattern", "command") if target.get(k)), "")
+    else:
+        what = target if isinstance(target, str) else ""
     return f"{denial.get('tool_name', '?')} {what}".strip()
 
 
@@ -136,10 +139,16 @@ def _numbered(findings: List[Dict[str, Any]]) -> List[Finding]:
 
 def _model(payload: Dict[str, Any]) -> str:
     """The model that actually answered: the costliest entry of modelUsage."""
-    usage = payload.get("modelUsage") or {}
-    if not usage:
+    usage = payload.get("modelUsage")
+    if not isinstance(usage, dict) or not usage:
         return "inconnu"
-    return str(max(usage, key=lambda name: (usage[name] or {}).get("costUSD", 0)))
+
+    def cost(name: str) -> float:
+        entry = usage[name]
+        value = entry.get("costUSD") if isinstance(entry, dict) else None
+        return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 0.0
+
+    return str(max(usage, key=cost))
 
 
 def _excerpt(text: str, limit: int = 300) -> str:
