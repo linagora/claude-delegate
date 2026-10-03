@@ -83,7 +83,10 @@ class PluginCommandsTest(unittest.TestCase):
         )
 
     def test_the_pr_review_command_checks_findings_at_the_reviewed_head_and_publishes_nothing(self) -> None:
-        _, body = parse_command(PLUGIN / "commands" / "pr-review.md")
+        fields, body = parse_command(PLUGIN / "commands" / "pr-review.md")
+
+        self.assertIn("merge request GitLab", fields["description"])
+        self.assertIn("--forge", fields["argument-hint"])
 
         self.assertEqual(
             shell_invocations(body),
