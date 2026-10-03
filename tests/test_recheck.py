@@ -3,15 +3,16 @@ from __future__ import annotations
 import json
 import unittest
 from pathlib import Path
-from typing import Any, Dict, Sequence
+from typing import Any, Sequence
 
 from tests.support import (
+    NEW_FINDING,
     PLUGIN,
     SAMPLE_FINDING,
     FeatureBranchTestCase,
     option,
+    recheck_result,
     report_path,
-    structured_result,
     success,
 )
 
@@ -29,31 +30,11 @@ PREPARATION_FAILURE = 3
 INCOMPLETE = 5
 INVALID_OUTPUT = 6
 
-NEW_FINDING = {
-    **SAMPLE_FINDING,
-    "severity": "important",
-    "problem": "Le correctif renvoie une valeur au lieu de lever une erreur",
-}
-
-
-def rechecked(**statuses: str) -> Dict[str, Any]:
-    """A re-review as the real Claude Code returns it, ruling `statuses` such as F1="traité"."""
-    return structured_result(
-        {
-            "summary": "Les corrections tiennent en partie.",
-            "statuses": {
-                finding: {"status": status, "justification": f"Justification de {finding}."}
-                for finding, status in statuses.items()
-            },
-            "findings": [NEW_FINDING],
-        }
-    )
-
 
 class RecheckTest(FeatureBranchTestCase):
     def setUp(self) -> None:
         super().setUp()
-        self.sb.fake.replies(success(findings=ORIGINAL_FINDINGS), rechecked(F1="traité", F2="mal traité"))
+        self.sb.fake.replies(success(findings=ORIGINAL_FINDINGS), recheck_result(F1="traité", F2="mal traité"))
 
     def review(self, *options: str) -> Path:
         """Run a hostile review; returns its report."""
@@ -146,7 +127,7 @@ class RecheckTest(FeatureBranchTestCase):
         self.sb.fake.replies(
             success(findings=ORIGINAL_FINDINGS),
             success(findings=[LATER_FINDING]),
-            rechecked(F1="traité", F2="traité"),
+            recheck_result(F1="traité", F2="traité"),
         )
         original = self.review_then_fix().stem
         self.review()
@@ -171,8 +152,8 @@ class RecheckTest(FeatureBranchTestCase):
     def test_rechecking_a_recheck_rules_on_what_it_left_open(self) -> None:
         self.sb.fake.replies(
             success(findings=ORIGINAL_FINDINGS),
-            rechecked(F1="traité", F2="mal traité"),
-            rechecked(F2="traité", F4="traité"),
+            recheck_result(F1="traité", F2="mal traité"),
+            recheck_result(F2="traité", F4="traité"),
         )
         self.review_then_fix()
         first = report_path(self.sb.run("recheck").stdout)
@@ -261,7 +242,7 @@ class RecheckTest(FeatureBranchTestCase):
         self.assert_refused([], "pull request")
 
     def test_a_recheck_that_skips_an_original_finding_is_an_invalid_output(self) -> None:
-        self.sb.fake.replies(success(findings=ORIGINAL_FINDINGS), rechecked(F1="traité"))
+        self.sb.fake.replies(success(findings=ORIGINAL_FINDINGS), recheck_result(F1="traité"))
         self.review_then_fix()
 
         result = self.sb.run("recheck")
@@ -270,7 +251,7 @@ class RecheckTest(FeatureBranchTestCase):
         self.assertEqual(result.stdout, "")
 
     def test_without_blocking_or_important_findings_only_what_changed_is_reviewed(self) -> None:
-        self.sb.fake.replies(success(findings=[ORIGINAL_FINDINGS[0]]), rechecked())
+        self.sb.fake.replies(success(findings=[ORIGINAL_FINDINGS[0]]), recheck_result())
         self.review_then_fix()
 
         result = self.sb.run("recheck")

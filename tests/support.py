@@ -105,6 +105,29 @@ def structured_result(structured: Dict[str, Any], model: str = "claude-opus-5-5"
     }
 
 
+#: What a recheck finds in `recheck_result`, numbered after the findings it rules on.
+NEW_FINDING = {
+    **SAMPLE_FINDING,
+    "severity": "important",
+    "problem": "Le correctif renvoie une valeur au lieu de lever une erreur",
+}
+
+
+def recheck_result(**statuses: str) -> Dict[str, Any]:
+    """A recheck as the real Claude Code returns it, ruling `statuses` such as
+    F1="traité" and finding NEW_FINDING."""
+    return structured_result(
+        {
+            "summary": "Les corrections tiennent en partie.",
+            "statuses": {
+                finding: {"status": status, "justification": f"Justification de {finding}."}
+                for finding, status in statuses.items()
+            },
+            "findings": [NEW_FINDING],
+        }
+    )
+
+
 def option(argv: List[str], name: str) -> str:
     """The value given to a command-line option."""
     return argv[argv.index(name) + 1]
