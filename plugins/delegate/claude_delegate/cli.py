@@ -6,9 +6,10 @@ import argparse
 import re
 import signal
 import sys
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import ContextManager, List, Optional
 
 from . import __version__, archive, delegate, forge, gitctx, interpret, prompts, recheck, report, schemas, selftest
 from .errors import EXIT_SELFTEST, DelegateError
@@ -108,15 +109,22 @@ def _recheck(designation: Optional[str]) -> int:
     root = gitctx.repository(Path.cwd())
     repo = archive.repo_key(root, gitctx.origin_url(root))
     earlier = recheck.report_to_recheck(repo, designation)
-    ctx = gitctx.recheck_context(root, earlier.base, earlier.reviewed_revision)
-    done, execution = delegate.launch(
-        root,
-        recheck.reviewer_input(earlier, ctx),
-        schemas.recheck([finding.id for finding in earlier.open_findings]),
-        prompts.recheck(ctx.conventions),
-        "Re-revue des corrections décrites sur l'entrée standard.",
-        model=earlier.requested_model,
-    )
+    workspace: ContextManager[Path]
+    if earlier.pull_request:
+        ctx = gitctx.pull_request_recheck_context(root, earlier.pull_request, earlier.reviewed_revision)
+        workspace = gitctx.pull_request_worktree(root, ctx.reviewed_revision)
+    else:
+        ctx = gitctx.recheck_context(root, earlier.base, earlier.reviewed_revision)
+        workspace = nullcontext(root)
+    with workspace as cwd:
+        done, execution = delegate.launch(
+            cwd,
+            recheck.reviewer_input(earlier, ctx),
+            schemas.recheck([finding.id for finding in earlier.open_findings]),
+            prompts.recheck(ctx.conventions, ctx.pull_request is not None),
+            "Re-revue des corrections décrites sur l'entrée standard.",
+            model=earlier.requested_model,
+        )
     review = interpret.read_recheck(done, earlier.open_findings, earlier.next_number)
     subject = report.recheck_subject(earlier.id, ctx, earlier.next_number + len(review.findings))
     return _publish(repo, subject, execution, review)

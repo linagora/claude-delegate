@@ -9,7 +9,7 @@ import shutil
 import subprocess
 import tempfile
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional, Tuple
 
@@ -81,14 +81,20 @@ class RecheckContext:
     merge_base: str
     #: The revision the rechecked report read.
     original_revision: str
-    #: The current state, frozen as a hostile review freezes it.
+    #: What the recheck reads: the working tree frozen as a hostile review
+    #: freezes it, or the new head of a pull request.
     reviewed_revision: str
     #: What changed since: from the original revision to the current one.
     gap: str
     #: The full current diff, from the merge-base.
     diff: str
-    #: The root CLAUDE.md at the merge-base, never from the reviewed work.
+    #: The root CLAUDE.md of the trusted revision, never from the reviewed
+    #: work: the merge-base, or the tip of a pull request's target branch.
     conventions: Optional[str]
+    #: For the recheck of a pull request: the pull request at its new head,
+    #: and its changed files the reviewer may not read.
+    pull_request: Optional[forge.PullRequest] = None
+    unreviewed: List[str] = field(default_factory=list)
 
 
 def pull_request_header(pr: forge.PullRequest, unreviewed: List[str]) -> str:
@@ -123,6 +129,20 @@ def recheck_context(root: Path, base: str, original_revision: str) -> RecheckCon
     _require_earlier(root, original_revision, "révision relue par le rapport d'origine", "/delegate:hostile-review")
     merge_base = _merge_base(root, base)
     return _recheck(root, base, merge_base, original_revision, _freeze_working_tree(root), merge_base)
+
+
+def pull_request_recheck_context(root: Path, key: forge.PullRequestKey, original_revision: str) -> RecheckContext:
+    """The pull request at its new head, asked of its forge again and fetched."""
+    fetched = _fetch_pull_request(root, origin_url(root), key.number, key.forge_name)
+    pr = fetched.pull_request
+    # Checked once fetched: the new head may bring the old one back.
+    _require_earlier(
+        root,
+        original_revision,
+        f"ancienne tête de la {pr.label}",
+        f"/delegate:pr-review {key.number} --forge {key.forge_name}",
+    )
+    return _recheck(root, pr.base, fetched.merge_base, original_revision, pr.head, fetched.base_revision, pr)
 
 
 def pull_request_context(cwd: Path, number: int, forge_name: Optional[str] = None) -> PullRequestContext:
@@ -208,7 +228,13 @@ def _require_earlier(root: Path, revision: str, what: str, full_review: str) -> 
 
 
 def _recheck(
-    root: Path, base: str, merge_base: str, original_revision: str, reviewed_revision: str, trusted_revision: str
+    root: Path,
+    base: str,
+    merge_base: str,
+    original_revision: str,
+    reviewed_revision: str,
+    trusted_revision: str,
+    pull_request: Optional[forge.PullRequest] = None,
 ) -> RecheckContext:
     """What a recheck reads from `original_revision` to `reviewed_revision`,
     with the conventions of `trusted_revision`."""
@@ -224,6 +250,8 @@ def _recheck(
         gap=gap,
         diff=diff,
         conventions=trusted_conventions(root, trusted_revision),
+        pull_request=pull_request,
+        unreviewed=_unreviewed_changes(root, merge_base, reviewed_revision) if pull_request else [],
     )
 
 

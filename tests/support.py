@@ -411,14 +411,19 @@ class PullRequestTestCase(unittest.TestCase):
         self.head = self._publish_from_contributor(files, self.REF.format(number=self.NUMBER))
         self.forge_cli.reply(self.metadata())
 
+    def extend_pull_request(self, files: Dict[str, str]) -> None:
+        """The author pushes `files` on top of the pull request's head."""
+        self.head = self._publish_from_contributor(files, self.REF.format(number=self.NUMBER), start=self.head)
+        self.forge_cli.reply(self.metadata())
+
     def move_target_branch(self, files: Dict[str, str]) -> None:
         """Someone else merges `files` into main on the forge."""
         self._publish_from_contributor(files, "refs/heads/main")
 
-    def _publish_from_contributor(self, files: Dict[str, str], ref: str) -> str:
+    def _publish_from_contributor(self, files: Dict[str, str], ref: str, start: str = "origin/main") -> str:
         clone = self.contributor
         self.sb.git("fetch", "-q", "origin", cwd=clone)
-        self.sb.git("switch", "-q", "--detach", "origin/main", cwd=clone)
+        self.sb.git("switch", "-q", "--detach", start, cwd=clone)
         for name, content in files.items():
             path = clone / name
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -458,6 +463,9 @@ class PullRequestTestCase(unittest.TestCase):
 
     def run_pr(self, *args: str) -> subprocess.CompletedProcess[str]:
         return self.sb.run("pr-review", self.NUMBER, *args, extra_env={"PATH": self.path_with_forge_cli()})
+
+    def run_recheck(self, *args: str) -> subprocess.CompletedProcess[str]:
+        return self.sb.run("recheck", *args, extra_env={"PATH": self.path_with_forge_cli()})
 
     def worktrees(self) -> int:
         """How many worktrees the repository has: 1 when no throwaway one is left."""

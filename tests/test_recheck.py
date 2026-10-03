@@ -231,11 +231,13 @@ class RecheckTest(FeatureBranchTestCase):
 
         self.assert_refused([], "rapport illisible")
 
-    def test_a_pull_request_report_is_not_rechecked_yet(self) -> None:
+    def test_a_pull_request_report_naming_no_pull_request_is_refused(self) -> None:
         report = self.review_then_fix()
-        rewrite_companion(report, type="pr")
+        head = json.loads(report.with_suffix(".json").read_text(encoding="utf-8"))["reviewed_revision"]
+        # A head, but neither a forge nor a pull request number.
+        rewrite_companion(report, type="pr", head=head)
 
-        self.assert_refused([], "pull request")
+        self.assert_refused([], "rapport illisible")
 
     def test_a_recheck_that_skips_an_original_finding_is_an_invalid_output(self) -> None:
         self.sb.fake.replies(success(findings=ORIGINAL_FINDINGS), recheck_result(F1="traité"))

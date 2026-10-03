@@ -71,23 +71,44 @@ def pr_subject(ctx: PullRequestContext) -> Subject:
 def recheck_subject(original_id: str, ctx: RecheckContext, next_finding_number: int) -> Subject:
     """`next_finding_number` comes after every finding of the chain of rechecks,
     those it no longer carries included."""
+    fields: Dict[str, Any] = {
+        "original": original_id,
+        "base": ctx.base,
+        "merge_base": ctx.merge_base,
+        "original_revision": ctx.original_revision,
+        "reviewed_revision": ctx.reviewed_revision,
+        "next_finding_number": next_finding_number,
+    }
+    pr = ctx.pull_request
+    if pr is None:
+        return Subject(
+            kind=RECHECK,
+            slug=RECHECK,
+            title="Re-revue",
+            rows=[
+                ("Rapport d'origine", original_id),
+                _base_row(ctx.base, ctx.merge_base),
+                ("Révision d'origine", _short(ctx.original_revision)),
+                ("Révision relue", _short(ctx.reviewed_revision)),
+            ],
+            fields=fields,
+        )
     return Subject(
         kind=RECHECK,
-        slug=RECHECK,
-        title="Re-revue",
+        slug=f"{RECHECK}-{PULL_REQUEST}-{pr.number}",
+        title=f"Re-revue de {pr.forge.term}",
         rows=[
             ("Rapport d'origine", original_id),
-            _base_row(ctx.base, ctx.merge_base),
-            ("Révision d'origine", _short(ctx.original_revision)),
-            ("Révision relue", _short(ctx.reviewed_revision)),
+            ("Ancienne tête", _short(ctx.original_revision)),
+            *_pull_request_rows(pr, ctx.unreviewed),
         ],
+        # So that a later recheck can follow the pull request further.
         fields={
-            "original": original_id,
-            "base": ctx.base,
-            "merge_base": ctx.merge_base,
-            "original_revision": ctx.original_revision,
-            "reviewed_revision": ctx.reviewed_revision,
-            "next_finding_number": next_finding_number,
+            **fields,
+            "forge": pr.forge.name,
+            "pr_number": pr.number,
+            "url": pr.url,
+            "unreviewed_files": ctx.unreviewed,
         },
     )
 

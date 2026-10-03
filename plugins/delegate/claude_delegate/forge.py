@@ -63,6 +63,14 @@ _GITLAB_FIELDS = ("title", "target_branch", "sha", "web_url")
 
 
 @dataclass(frozen=True)
+class PullRequestKey:
+    """Which pull request a chain of reviews follows."""
+
+    forge_name: str
+    number: int
+
+
+@dataclass(frozen=True)
 class Remote:
     host: str
     #: The repository's path on its host, such as owner/name or
