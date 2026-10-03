@@ -80,8 +80,14 @@ def success(
     summary: str = "Une division par zéro est possible.",
     model: str = "claude-opus-5-5",
 ) -> Dict[str, Any]:
-    """A `claude -p --output-format json` result carrying structured output."""
-    structured = {"summary": summary, "findings": [SAMPLE_FINDING] if findings is None else findings}
+    """A `claude -p --output-format json` result carrying a hostile review."""
+    return structured_result(
+        {"summary": summary, "findings": [SAMPLE_FINDING] if findings is None else findings}, model
+    )
+
+
+def structured_result(structured: Dict[str, Any], model: str = "claude-opus-5-5") -> Dict[str, Any]:
+    """A `claude -p --output-format json` result carrying `structured` as its structured output."""
     return {
         "type": "result",
         "subtype": "success",

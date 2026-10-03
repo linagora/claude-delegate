@@ -5,7 +5,15 @@ import unittest
 from pathlib import Path
 from typing import Any, Dict, Sequence
 
-from tests.support import PLUGIN, SAMPLE_FINDING, FeatureBranchTestCase, option, report_path, success
+from tests.support import (
+    PLUGIN,
+    SAMPLE_FINDING,
+    FeatureBranchTestCase,
+    option,
+    report_path,
+    structured_result,
+    success,
+)
 
 #: What the original hostile review finds: F1 (bloquant), F2 (important), F3 (mineur).
 ORIGINAL_FINDINGS = [
@@ -30,18 +38,16 @@ NEW_FINDING = {
 
 def rechecked(**statuses: str) -> Dict[str, Any]:
     """A re-review as the real Claude Code returns it, ruling `statuses` such as F1="traité"."""
-    payload = success()
-    structured = {
-        "summary": "Les corrections tiennent en partie.",
-        "statuses": {
-            finding: {"status": status, "justification": f"Justification de {finding}."}
-            for finding, status in statuses.items()
-        },
-        "findings": [NEW_FINDING],
-    }
-    payload["structured_output"] = structured
-    payload["result"] = json.dumps(structured)
-    return payload
+    return structured_result(
+        {
+            "summary": "Les corrections tiennent en partie.",
+            "statuses": {
+                finding: {"status": status, "justification": f"Justification de {finding}."}
+                for finding, status in statuses.items()
+            },
+            "findings": [NEW_FINDING],
+        }
+    )
 
 
 class RecheckTest(FeatureBranchTestCase):
