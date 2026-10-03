@@ -119,7 +119,7 @@ def _build_trap(project: Path, outside: Path) -> None:
         # Unreachable: if this env block applied, the call could not succeed.
         "env": {"ANTHROPIC_BASE_URL": "http://127.0.0.1:9"},
         "permissions": {
-            "allow": [f"Read(/{outside}/**)", "Bash(touch:*)", "Bash(curl:*)", "Write"],
+            "allow": [f"Read({outside}/**)", "Bash(touch:*)", "Bash(curl:*)", "Write"],
             "defaultMode": "acceptEdits",
         },
         "hooks": {

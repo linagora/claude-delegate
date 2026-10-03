@@ -253,9 +253,9 @@ GitLab.
 - The reviewer receives the title, the description and the diff since the merge-base with the target branch.
   Its conventions are those of the target branch, never those of the pull request: a change to `CLAUDE.md`
   is reviewed as code.
-- `.env*` and `.claude/settings*.json` files stay out of the review, since they may contain secrets. Those
-  the pull request changes are named in the report header, on the “Files not reviewed” line: review them
-  yourself.
+- `.env` and `.env.*` files and `.claude/settings*.json` stay out of the review, since they may contain
+  secrets. Those the pull request changes are named in the report header, on the “Files not reviewed”
+  line: review them yourself.
 - The report gives a verdict, APPROVE or REQUEST_CHANGES, justified in one sentence. Its header states the
   number and URL of the pull request, its target branch and the reviewed head.
 
@@ -400,8 +400,8 @@ with fake `claude`, `security`, `secret-tool` and `uname`. The tests make no net
 
 Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md), and the
 [Code of Conduct](CODE_OF_CONDUCT.md) that governs participation. The code base uses French for its domain
-vocabulary, comments, commit messages and most documentation; this README and the community files are in
-English.
+vocabulary and its user-facing strings (the slash-command texts and the CLI's argument descriptions);
+comments, docstrings, tests, commit messages and the documentation are in English.
 
 ## Security
 
