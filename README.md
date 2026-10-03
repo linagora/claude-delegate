@@ -4,7 +4,7 @@ Plugin Claude Code qui délègue les revues de code d'une session branchée sur 
 
 ## Installation
 
-Prérequis : Claude Code (de préférence le binaire natif, `~/.local/bin/claude`), git, Python 3.9 ou plus récent, et un abonnement Claude. Pour relire des pull requests GitHub, il faut aussi GitHub CLI (`gh`).
+Prérequis : Claude Code (de préférence le binaire natif, `~/.local/bin/claude`), git, Python 3.9 ou plus récent, et un abonnement Claude. Pour relire des pull requests, il faut aussi GitHub CLI (`gh`) ou, pour les merge requests GitLab, GitLab CLI (`glab`).
 
 1. **Installer le plugin**, dans la configuration qu'utilisent tes sessions DeepSeek. Le dépôt est privé : il faut un accès git à `linagora/claude-delegate`.
 
@@ -76,29 +76,37 @@ L'en-tête du rapport indique comment la revue a tourné :
 - les versions du plugin et de Claude Code ;
 - les permissions refusées au relecteur.
 
-### Relire une pull request
+### Relire une pull request ou une merge request
 
 ```
-/delegate:pr-review <numéro> [--model sonnet]
+/delegate:pr-review <numéro> [--forge github|gitlab] [--model sonnet]
 ```
 
-La commande relit une pull request GitHub sur son propre code, et non sur ta branche locale. `origin` doit être sur `github.com`, et `gh` doit y être connecté (`gh auth login`).
+La commande relit une pull request GitHub ou une merge request GitLab sur son propre code, et non sur ta branche locale.
 
-- `gh` fournit le titre, la description, la branche cible, la tête et l'URL de la pull request.
-- git récupère la branche cible et la tête de la pull request (`pull/<numéro>/head`) sans déplacer aucune référence de ton dépôt. Ta branche, ton index et ton arbre de travail ne changent pas non plus.
+La forge se déduit de l'hôte d'`origin` :
+
+- `github.com` désigne GitHub ;
+- un hôte dont le nom contient « gitlab », comme gitlab.com, ou auquel `glab` est connecté, comme une instance d'entreprise, désigne GitLab ;
+- dans les autres cas, par exemple pour GitHub Enterprise, précise la forge avec `--forge github` ou `--forge gitlab`.
+
+L'outil de la forge doit y être connecté : `gh auth login` ou `glab auth login`. `glab` n'est requis que pour GitLab.
+
+- `gh` ou `glab` fournit le titre, la description, la branche cible, la tête et l'URL de la pull request.
+- git récupère la branche cible et la tête de la pull request (`pull/<numéro>/head`, ou `merge-requests/<numéro>/head` sur GitLab) sans déplacer aucune référence de ton dépôt. Ta branche, ton index et ton arbre de travail ne changent pas non plus.
 - Le relecteur lit la pull request dans un worktree détaché et jetable, créé hors du dépôt sans exécuter aucun hook git. Le CLI en retire d'abord tous les `CLAUDE.md`, `CLAUDE.local.md`, `.claude/` et `.mcp.json`, quelle que soit leur casse : la configuration apportée par la pull request n'atteint jamais le relecteur. Le worktree est supprimé à la fin, même en cas d'échec ou d'interruption.
 - Le relecteur reçoit le titre, la description et le diff depuis le merge-base avec la branche cible. Ses conventions sont celles de la branche cible, jamais celles de la pull request : une modification de `CLAUDE.md` est relue comme du code.
 - Les fichiers `.env*` et `.claude/settings*.json` restent hors de la revue, car ils peuvent contenir des secrets. Ceux que la pull request modifie sont nommés dans l'en-tête du rapport, à la ligne « Fichiers non relus » : relis-les toi-même.
 - Le rapport donne un verdict, APPROVE ou REQUEST_CHANGES, justifié en une phrase. Son en-tête indique le numéro et l'URL de la pull request, sa branche cible et la tête relue.
 
-DeepSeek vérifie ensuite chaque point à la tête relue, avec `git show <tête>:<chemin>`, sans checkout. Rien n'est publié sur GitHub : c'est toi qui décides de ce que tu publies.
+DeepSeek vérifie ensuite chaque point à la tête relue, avec `git show <tête>:<chemin>`, sans checkout. Rien n'est publié sur la forge : c'est toi qui décides de ce que tu publies.
 
 Si la pull request évolue, même par un force-push, relance simplement la commande.
 
 La revue ne démarre pas, avec le code de sortie 3, dans ces cas :
 
-- `origin` n'est pas sur `github.com` ;
-- `gh` est absent, ou ne peut pas lire la pull request ;
+- la forge d'`origin` n'est pas reconnue : précise-la avec `--forge` ;
+- `gh` ou `glab` est absent, ou ne peut pas lire la pull request ;
 - la pull request a changé pendant la préparation : relance alors la commande ;
 - la pull request n'a aucun ancêtre commun avec sa branche cible, ne change que des fichiers exclus de la revue ou rien du tout, ou son diff dépasse 1 000 000 caractères.
 
@@ -172,4 +180,4 @@ python3 -m unittest discover -s tests -t .
 claude plugin validate --strict . && claude plugin validate --strict plugins/delegate
 ```
 
-Les tests appellent le CLI comme un processus, dans de vrais dépôts git temporaires, avec un faux `claude` et un faux `gh`. Une pull request y vit dans un dépôt nu local qui sert d'`origin`, auquel une règle `url.insteadOf` donne une URL GitHub. Les tests ne font ni appel réseau ni appel de modèle.
+Les tests appellent le CLI comme un processus, dans de vrais dépôts git temporaires, avec un faux `claude` et un faux `gh` ou `glab`. Une pull request y vit dans un dépôt nu local qui sert d'`origin`, auquel une règle `url.insteadOf` donne une URL GitHub ou GitLab. Les tests ne font ni appel réseau ni appel de modèle.

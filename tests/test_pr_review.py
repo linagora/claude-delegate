@@ -3,20 +3,19 @@ from __future__ import annotations
 import json
 import os
 import shlex
-import shutil
 import signal
 import unittest
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import List
 
 from tests.support import (
     PLUGIN,
-    SAMPLE_FINDING,
+    VERDICT_REASON,
     PullRequestTestCase,
     interrupt_review,
     option,
     report_path,
-    structured_result,
+    pr_review_result,
     success,
 )
 
@@ -24,25 +23,11 @@ PREPARATION_FAILURE = 3
 USAGE_ERROR = 2
 INVALID_OUTPUT = 6
 
-REASON = "La division par zéro reste mal gérée."
-
-
-def reviewed(verdict: Any = "REQUEST_CHANGES", reason: str = REASON) -> Dict[str, Any]:
-    """A pull request review as the real Claude Code returns it."""
-    return structured_result(
-        {
-            "summary": "La PR traite la division par zéro.",
-            "verdict": verdict,
-            "verdict_reason": reason,
-            "findings": [SAMPLE_FINDING],
-        }
-    )
-
 
 class PullRequestReviewTest(PullRequestTestCase):
     def setUp(self) -> None:
         super().setUp()
-        self.sb.fake.reply(reviewed())
+        self.sb.fake.reply(pr_review_result())
 
     def worktrees(self) -> int:
         return self.sb.git("worktree", "list", "--porcelain").count("worktree ")
@@ -96,7 +81,7 @@ class PullRequestReviewTest(PullRequestTestCase):
         self.assertNotIn("LATER_ON_MAIN", stdin)
         # A single read: nothing is published on GitHub.
         self.assertEqual(
-            self.gh.calls(),
+            self.forge_cli.calls(),
             [["pr", "view", "7", "--repo", "github.com/acme/app", "--json", "title,body,baseRefName,headRefOid,url"]],
         )
 
@@ -218,7 +203,7 @@ class PullRequestReviewTest(PullRequestTestCase):
     def test_the_report_gives_the_verdict_and_identifies_the_pull_request(self) -> None:
         result = self.run_pr()
 
-        self.assertIn(f"## Verdict\n\nREQUEST_CHANGES : {REASON}", result.stdout)
+        self.assertIn(f"## Verdict\n\nREQUEST_CHANGES : {VERDICT_REASON}", result.stdout)
         self.assertIn("| Pull request | #7 https://github.com/acme/app/pull/7 |", result.stdout)
         self.assertIn("| Branche cible | main |", result.stdout)
         self.assertIn(f"| Tête | {self.head} |", result.stdout)
@@ -234,7 +219,7 @@ class PullRequestReviewTest(PullRequestTestCase):
     def test_a_review_without_a_valid_verdict_is_an_invalid_output(self) -> None:
         for verdict in [None, "MAYBE"]:
             with self.subTest(verdict=verdict):
-                self.sb.fake.reply(reviewed(verdict=verdict))
+                self.sb.fake.reply(pr_review_result(verdict=verdict))
 
                 result = self.run_pr()
 
@@ -251,9 +236,11 @@ class PullRequestReviewTest(PullRequestTestCase):
         self.assertEqual(self.worktrees(), 1)
 
     def test_an_interrupted_review_removes_the_worktree(self) -> None:
-        self.sb.fake.reply(reviewed(), sleep=30)
+        self.sb.fake.reply(pr_review_result(), sleep=30)
 
-        call, _ = interrupt_review(self.sb, ["pr-review", self.NUMBER], signal.SIGINT, {"PATH": self.path_with_gh()})
+        call, _ = interrupt_review(
+            self.sb, ["pr-review", self.NUMBER], signal.SIGINT, {"PATH": self.path_with_forge_cli()}
+        )
 
         self.assertFalse(os.path.exists(call["cwd"]))
         self.assertEqual(self.worktrees(), 1)
@@ -267,13 +254,24 @@ class PullRequestReviewTest(PullRequestTestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("AFTER_FORCE_PUSH", self.sb.fake.last_call()["stdin"])
 
+    def test_the_forge_option_forces_github_on_another_host(self) -> None:
+        self.use_origin("https://github.corp.example/acme/app.git")
+
+        result = self.run_pr("--forge", "github")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        fields = "title,body,baseRefName,headRefOid,url"
+        self.assertEqual(
+            self.forge_cli.calls(), [["pr", "view", "7", "--repo", "github.corp.example/acme/app", "--json", fields]]
+        )
+
     def test_invalid_pull_request_numbers_are_refused(self) -> None:
         for number in ["7a", "-1", "../7", "0"]:
             with self.subTest(number):
                 self.assertEqual(self.sb.run("pr-review", number).returncode, USAGE_ERROR)
         self.assertEqual(self.sb.fake.calls(), [])
 
-    def test_an_origin_that_is_not_on_github_is_refused(self) -> None:
+    def test_an_origin_without_a_host_is_refused(self) -> None:
         self.sb.git("remote", "set-url", "origin", str(self.origin))
 
         result = self.run_pr()
@@ -283,7 +281,7 @@ class PullRequestReviewTest(PullRequestTestCase):
         self.assertEqual(self.sb.fake.calls(), [])
 
     def test_a_pull_request_that_moves_during_preparation_is_not_reviewed(self) -> None:
-        self.gh.reply(self.metadata(headRefOid="0" * 40))
+        self.forge_cli.reply(self.metadata(headRefOid="0" * 40))
 
         result = self.run_pr()
 
@@ -292,20 +290,14 @@ class PullRequestReviewTest(PullRequestTestCase):
         self.assertEqual(self.sb.fake.calls(), [])
 
     def test_without_gh_the_review_says_where_to_get_it(self) -> None:
-        only_git = self.sb.root / "only-git"
-        only_git.mkdir()
-        git = shutil.which("git")
-        assert git is not None
-        (only_git / "git").symlink_to(git)
-
-        result = self.sb.run("pr-review", self.NUMBER, extra_env={"PATH": str(only_git)})
+        result = self.sb.run("pr-review", self.NUMBER, extra_env={"PATH": self.path_with_only_git()})
 
         self.assertEqual(result.returncode, PREPARATION_FAILURE, result.stderr)
         self.assertIn("https://cli.github.com", result.stderr)
         self.assertEqual(self.sb.fake.calls(), [])
 
     def test_a_pull_request_gh_cannot_read_is_a_preparation_failure(self) -> None:
-        self.gh.fail("GraphQL: Could not resolve to a PullRequest with the number of 7.")
+        self.forge_cli.fail("GraphQL: Could not resolve to a PullRequest with the number of 7.")
 
         result = self.run_pr()
 

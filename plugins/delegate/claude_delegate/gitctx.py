@@ -65,14 +65,14 @@ class PullRequestContext:
         """The pull request as its author presents it, then its diff."""
         pr = self.pull_request
         return (
-            f"Pull request #{pr.number} : {pr.title}\n"
+            f"{pr.label.capitalize()} : {pr.title}\n"
             f"URL : {pr.url}\n"
             f"Branche cible : {pr.base}\n"
             f"Tête : {pr.head}\n"
             f"Fichiers non relus : {', '.join(self.unreviewed) or 'aucun'}\n"
-            "\n--- Début de la description de la pull request ---\n"
+            f"\n--- Début de la description de la {pr.forge.term} ---\n"
             f"{pr.body.strip() or '(aucune description)'}\n"
-            "--- Fin de la description de la pull request ---\n"
+            f"--- Fin de la description de la {pr.forge.term} ---\n"
             f"\n--- Début du diff, du merge-base avec {pr.base} jusqu'à la tête ---\n"
             f"{self.diff}"
             "--- Fin du diff ---\n"
@@ -138,28 +138,29 @@ def recheck_context(root: Path, base: str, original_revision: str) -> RecheckCon
     )
 
 
-def pull_request_context(cwd: Path, number: int) -> PullRequestContext:
+def pull_request_context(cwd: Path, number: int, forge_name: Optional[str] = None) -> PullRequestContext:
+    """`forge_name` overrides the forge origin's host points to."""
     root = repository(cwd)
     origin = origin_url(root)
-    pr = forge.pull_request(origin, number)
+    pr = forge.pull_request(origin, number, forge_name)
     base_revision = _fetch(root, f"refs/heads/{pr.base}")
     head = _fetch(root, pr.ref)
     if head != pr.head:
         raise DelegateError(
-            f"la pull request #{number} a changé pendant la préparation (tête {pr.head[:12]} selon la forge, "
+            f"la {pr.label} a changé pendant la préparation (tête {pr.head[:12]} selon la forge, "
             f"{head[:12]} récupérée) : relance la revue",
             EXIT_PREPARATION,
         )
     merge_base = _git_or_none(root, "merge-base", base_revision, head)
     if merge_base is None:
-        raise DelegateError(f"aucun ancêtre commun entre {pr.base} et la pull request #{number}", EXIT_PREPARATION)
+        raise DelegateError(f"aucun ancêtre commun entre {pr.base} et la {pr.label}", EXIT_PREPARATION)
     return PullRequestContext(
         root=root,
         origin_url=origin,
         pull_request=pr,
         base_revision=base_revision,
         merge_base=merge_base,
-        diff=_reviewable_diff(root, merge_base, head, f"la pull request #{number} ne change rien à {pr.base}"),
+        diff=_reviewable_diff(root, merge_base, head, f"la {pr.label} ne change rien à {pr.base}"),
         unreviewed=_unreviewed_changes(root, merge_base, head),
         conventions=trusted_conventions(root, base_revision),
     )
