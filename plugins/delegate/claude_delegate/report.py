@@ -52,15 +52,16 @@ def pr_subject(ctx: PullRequestContext) -> Subject:
     return Subject(
         kind=PULL_REQUEST,
         slug=f"{PULL_REQUEST}-{pr.number}",
-        title="Revue de pull request",
+        title=f"Revue de {pr.forge.term}",
         rows=[
-            ("Pull request", f"#{pr.number} {pr.url}"),
+            (pr.forge.term.capitalize(), f"{pr.reference} {pr.url}"),
             ("Branche cible", pr.base),
             # In full: DeepSeek reads the reviewed files at this commit.
             ("Tête", pr.head),
             ("Fichiers non relus", ", ".join(ctx.unreviewed) or "aucun"),
         ],
         fields={
+            "forge": pr.forge.name,
             "pr_number": pr.number,
             "url": pr.url,
             "base": pr.base,

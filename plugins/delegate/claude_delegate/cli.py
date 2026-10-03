@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
-from . import __version__, archive, delegate, gitctx, interpret, prompts, recheck, report, schemas, selftest
+from . import __version__, archive, delegate, forge, gitctx, interpret, prompts, recheck, report, schemas, selftest
 from .errors import EXIT_SELFTEST, DelegateError
 
 
@@ -25,8 +25,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     hostile = commands.add_parser("hostile-review", help="Revue hostile des changements en cours.")
     hostile.add_argument("base", nargs="?", help="Branche de base (défaut : branche par défaut d'origin).")
     _add_model_option(hostile)
-    pull_request = commands.add_parser("pr-review", help="Revue d'une pull request GitHub, sur son propre code.")
+    pull_request = commands.add_parser(
+        "pr-review", help="Revue d'une pull request GitHub ou d'une merge request GitLab, sur son propre code."
+    )
     pull_request.add_argument("number", type=_pull_request_number, help="Numéro de la pull request.")
+    pull_request.add_argument(
+        "--forge",
+        choices=sorted(forge.FORGES),
+        help="Forge de la pull request (défaut : déduite de l'hôte d'origin).",
+    )
     _add_model_option(pull_request)
     recheck_command = commands.add_parser(
         "recheck", help="Re-revue après corrections : statue sur chaque constat de la revue d'origine."
@@ -44,7 +51,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         if args.command == "selftest":
             return _selftest()
         if args.command == "pr-review":
-            return _pr_review(args.number, args.model)
+            return _pr_review(args.number, args.forge, args.model)
         if args.command == "recheck":
             return _recheck(args.report)
         return _hostile_review(args.base, args.model)
@@ -82,15 +89,15 @@ def _hostile_review(base: Optional[str], model: str) -> int:
     return _publish(archive.repo_key(ctx.root, ctx.origin_url), report.hostile_subject(ctx), execution, review)
 
 
-def _pr_review(number: int, model: str) -> int:
-    ctx = gitctx.pull_request_context(Path.cwd(), number)
+def _pr_review(number: int, forge_name: Optional[str], model: str) -> int:
+    ctx = gitctx.pull_request_context(Path.cwd(), number, forge_name)
     with gitctx.pull_request_worktree(ctx.root, ctx.pull_request.head) as tree:
         done, execution = delegate.launch(
             tree,
             ctx.reviewer_input(),
             schemas.PR_REVIEW,
             prompts.pr_review(ctx.conventions),
-            "Revue de la pull request fournie sur l'entrée standard.",
+            f"Revue de la {ctx.pull_request.forge.term} fournie sur l'entrée standard.",
             model=model,
         )
     review = interpret.read_pr_review(done)

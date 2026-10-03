@@ -2,9 +2,10 @@
 
 Everything is exercised through the single agreed seam: the CLI run as a
 process, in real temporary git repositories, with the `claude` binary
-replaced by a recording fake (via CLAUDE_DELEGATE_BIN), and `gh` by another
-placed first on the PATH. A pull request lives in a local bare repository
-serving as origin, which an insteadOf rule gives a GitHub URL.
+replaced by a recording fake (via CLAUDE_DELEGATE_BIN), and `gh` or `glab`
+by another placed first on the PATH. A pull request lives in a local bare
+repository serving as origin, which an insteadOf rule gives a GitHub or a
+GitLab URL.
 """
 
 from __future__ import annotations
@@ -407,6 +408,11 @@ class PullRequestTestCase(unittest.TestCase):
             **fields,
         }
 
+    def use_origin(self, url: str) -> None:
+        """Make origin `url`, still served by the local bare repository."""
+        self.sb.git("config", f"url.{self.origin}.insteadOf", url)
+        self.sb.git("remote", "set-url", "origin", url)
+
     def path_with_forge_cli(self) -> str:
         return f"{self.forge_cli.directory}{os.pathsep}{os.environ['PATH']}"
 
@@ -422,3 +428,23 @@ class PullRequestTestCase(unittest.TestCase):
 
     def run_pr(self, *args: str) -> subprocess.CompletedProcess[str]:
         return self.sb.run("pr-review", self.NUMBER, *args, extra_env={"PATH": self.path_with_forge_cli()})
+
+
+class MergeRequestTestCase(PullRequestTestCase):
+    """A repository whose origin looks like a GitLab instance, holding merge request !7."""
+
+    URL = "https://gitlab.example.com/acme/app.git"
+    CLI = "glab"
+    REF = "refs/merge-requests/{number}/head"
+
+    def metadata(self, **fields: Any) -> Dict[str, Any]:
+        """The merge request as GitLab's REST API describes it."""
+        return {
+            "iid": int(self.NUMBER),
+            "title": "Gérer la division par zéro",
+            "description": "Cette MR renvoie PR_CHANGE quand b vaut zéro.",
+            "target_branch": "main",
+            "sha": self.head,
+            "web_url": f"https://gitlab.example.com/acme/app/-/merge_requests/{self.NUMBER}",
+            **fields,
+        }

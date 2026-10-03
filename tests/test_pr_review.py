@@ -254,13 +254,24 @@ class PullRequestReviewTest(PullRequestTestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("AFTER_FORCE_PUSH", self.sb.fake.last_call()["stdin"])
 
+    def test_the_forge_option_forces_github_on_another_host(self) -> None:
+        self.use_origin("https://github.corp.example/acme/app.git")
+
+        result = self.run_pr("--forge", "github")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        fields = "title,body,baseRefName,headRefOid,url"
+        self.assertEqual(
+            self.forge_cli.calls(), [["pr", "view", "7", "--repo", "github.corp.example/acme/app", "--json", fields]]
+        )
+
     def test_invalid_pull_request_numbers_are_refused(self) -> None:
         for number in ["7a", "-1", "../7", "0"]:
             with self.subTest(number):
                 self.assertEqual(self.sb.run("pr-review", number).returncode, USAGE_ERROR)
         self.assertEqual(self.sb.fake.calls(), [])
 
-    def test_an_origin_that_is_not_on_github_is_refused(self) -> None:
+    def test_an_origin_without_a_host_is_refused(self) -> None:
         self.sb.git("remote", "set-url", "origin", str(self.origin))
 
         result = self.run_pr()
