@@ -28,6 +28,7 @@ Toutes les étapes se font depuis un terminal.
    - Il fait pointer tous les modèles (principal, Opus, Sonnet, Haiku et sous-agents) vers celui du gateway, car une clé du gateway n'en atteint aucun autre.
    - Il porte le timeout des commandes `!` à 15 minutes : une revue Opus dépasse souvent les 2 minutes par défaut.
    - Claude Code ne connaît pas ce modèle : le coût qu'il affiche est faux, seule compte la facturation du gateway.
+   - Les connecteurs de claude.ai (Gmail, Google Drive, etc.) ne sont pas disponibles dans ces sessions.
    - Pour passer par l'API de DeepSeek elle-même, positionne `CLAUDE_DEEPSEEK_BASE_URL`, `CLAUDE_DEEPSEEK_MODEL` et `CLAUDE_DEEPSEEK_KEY_SERVICE`, d'après la [documentation de DeepSeek pour Claude Code](https://api-docs.deepseek.com/quick_start/agent_integrations/claude_code).
 
 3. **Te connecter une fois à Anthropic**, dans un dossier de configuration dédié et vierge. N'y crée aucun lien vers `~/.claude` : la session déléguée ne doit hériter ni de tes réglages, ni de tes plugins. Cette session ne sert qu'à la connexion : n'y installe rien.
