@@ -7,6 +7,9 @@
 #
 # To use another Anthropic-compatible API, such as DeepSeek's own, set
 # CLAUDE_DEEPSEEK_BASE_URL, CLAUDE_DEEPSEEK_MODEL and CLAUDE_DEEPSEEK_KEY_SERVICE.
+#
+# The permission prompts are bypassed, and the effort parameter is forced
+# through; export CLAUDE_DEEPSEEK_ASK_PERMISSIONS=1 to get the prompts back.
 set -euo pipefail
 
 base_url="${CLAUDE_DEEPSEEK_BASE_URL:-https://ai-api.linagora.com}"
@@ -41,7 +44,17 @@ export ANTHROPIC_DEFAULT_OPUS_MODEL="$model"
 export ANTHROPIC_DEFAULT_SONNET_MODEL="$model"
 export ANTHROPIC_DEFAULT_HAIKU_MODEL="$model"
 export CLAUDE_CODE_SUBAGENT_MODEL="$model"
+# Claude Code only sends the effort parameter to models it recognises as
+# effort-capable, and a model behind a gateway is not one of them: without
+# this, --effort and /effort have no effect at all on this session.
+export CLAUDE_CODE_ALWAYS_ENABLE_EFFORT="${CLAUDE_CODE_ALWAYS_ENABLE_EFFORT:-1}"
 # The delegate plugin's `!` commands run a whole review: 15 minutes, not 2.
 export BASH_DEFAULT_TIMEOUT_MS="${BASH_DEFAULT_TIMEOUT_MS:-900000}"
 
-exec claude "$@"
+# The permission prompts are bypassed: a session on a cheap model should spend
+# its turns on the code, not on approvals. Export CLAUDE_DEEPSEEK_ASK_PERMISSIONS=1
+# to get the prompts back.
+if [ "${CLAUDE_DEEPSEEK_ASK_PERMISSIONS:-}" = "1" ]; then
+  exec claude "$@"
+fi
+exec claude --dangerously-skip-permissions "$@"

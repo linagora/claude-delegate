@@ -101,7 +101,7 @@ class LauncherTest(unittest.TestCase):
         # subagents asking for a Claude model would be refused.
         self.assertEqual({env[name] for name in MODEL_VARIABLES}, {GATEWAY_MODEL})
         self.assertEqual(env["BASH_DEFAULT_TIMEOUT_MS"], "900000")
-        self.assertEqual(started["argv"], ["--resume", "abc"])
+        self.assertEqual(started["argv"], ["--dangerously-skip-permissions", "--resume", "abc"])
 
     def test_without_a_key_nothing_starts_and_the_way_to_store_one_is_given(self) -> None:
         self.store({})
@@ -147,6 +147,20 @@ class LauncherTest(unittest.TestCase):
         started = self.started(self.launch(env={"BASH_DEFAULT_TIMEOUT_MS": "1200000"}))
 
         self.assertEqual(started["env"]["BASH_DEFAULT_TIMEOUT_MS"], "1200000")
+
+    def test_the_effort_parameter_is_forced_because_the_gateway_model_is_unknown(self) -> None:
+        # Claude Code sends no effort parameter to a model it does not
+        # recognise as effort-capable, which is the case behind a gateway.
+        started = self.started(self.launch())
+
+        self.assertEqual(started["env"]["CLAUDE_CODE_ALWAYS_ENABLE_EFFORT"], "1")
+
+    def test_permissions_are_bypassed_and_the_choice_can_be_reversed(self) -> None:
+        bypassed = self.started(self.launch("--resume", "abc"))
+        asked = self.started(self.launch("--resume", "abc", env={"CLAUDE_DEEPSEEK_ASK_PERMISSIONS": "1"}))
+
+        self.assertEqual(bypassed["argv"], ["--dangerously-skip-permissions", "--resume", "abc"])
+        self.assertEqual(asked["argv"], ["--resume", "abc"])
 
     @unittest.skipUnless(shutil.which("shellcheck"), "shellcheck is not installed")
     def test_the_launcher_passes_shellcheck(self) -> None:
