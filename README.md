@@ -4,16 +4,46 @@ Plugin Claude Code qui délègue les revues de code d'une session branchée sur 
 
 ## Installation
 
-Prérequis : Claude Code (de préférence le binaire natif, `~/.local/bin/claude`), git, Python 3.9 ou plus récent, et un abonnement Claude. Pour relire des pull requests, il faut aussi GitHub CLI (`gh`) ou, pour les merge requests GitLab, GitLab CLI (`glab`).
+Prérequis : Claude Code (de préférence le binaire natif, `~/.local/bin/claude`), git, Python 3.9 ou plus récent, une clé API DeepSeek pour tes sessions de travail ([platform.deepseek.com](https://platform.deepseek.com/api_keys)) et un abonnement Claude pour le relecteur. Pour relire des pull requests, il faut aussi GitHub CLI (`gh`) ou, pour les merge requests GitLab, GitLab CLI (`glab`).
 
-1. **Installer le plugin**, dans la configuration qu'utilisent tes sessions DeepSeek. Le dépôt est privé : il faut un accès git à `linagora/claude-delegate`.
+1. **Lancer Claude Code sur DeepSeek.** DeepSeek expose une API compatible avec celle d'Anthropic, à laquelle Claude Code se branche par des variables d'environnement. Ne les mets ni dans `~/.zshenv`, ni dans un `settings.json` : toutes tes sessions partiraient chez DeepSeek, y compris celles que tu veux garder sur Anthropic. Définis-les dans une fonction de lancement, par exemple dans `~/.zshrc` :
+
+   ```bash
+   claude-deepseek() {
+     ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic \
+     ANTHROPIC_AUTH_TOKEN="$(security find-generic-password -s deepseek-api-key -w)" \
+     ANTHROPIC_MODEL='deepseek-flash[1m]' \
+     ANTHROPIC_DEFAULT_OPUS_MODEL='deepseek-flash[1m]' \
+     ANTHROPIC_DEFAULT_SONNET_MODEL='deepseek-flash[1m]' \
+     ANTHROPIC_DEFAULT_HAIKU_MODEL=deepseek-flash \
+     CLAUDE_CODE_SUBAGENT_MODEL=deepseek-flash \
+     CLAUDE_CODE_EFFORT_LEVEL=max \
+     CLAUDE_CODE_AUTO_COMPACT_WINDOW=786432 \
+     BASH_DEFAULT_TIMEOUT_MS=900000 \
+     claude "$@"
+   }
+   ```
+
+   Les valeurs suivent la [documentation de DeepSeek pour Claude Code](https://api-docs.deepseek.com/quick_start/agent_integrations/claude_code) : reprends-les si elle évolue. `BASH_DEFAULT_TIMEOUT_MS` porte le timeout des commandes `!` à 15 minutes, car une revue Opus dépasse souvent les 2 minutes par défaut. Le relecteur délégué, lui, n'hérite d'aucune de ces variables.
+
+   La clé API reste dans le trousseau, jamais en clair dans un fichier. Sous macOS, range-la une fois, la commande la demande :
+
+   ```bash
+   security add-generic-password -a "$USER" -s deepseek-api-key -w
+   ```
+
+   Sous Linux, range-la avec `secret-tool store --label=DeepSeek service deepseek-api-key` (paquet `libsecret-tools`), et lis-la dans la fonction avec `"$(secret-tool lookup service deepseek-api-key)"`.
+
+   Ouvre ensuite tes sessions de travail avec `claude-deepseek`, et vérifie avec `/status` qu'elles utilisent bien le modèle DeepSeek.
+
+2. **Installer le plugin**, depuis une session `claude-deepseek`. Il s'installe dans ta configuration utilisateur (`~/.claude`), que partagent tes sessions DeepSeek et Anthropic. Le dépôt est privé : il faut un accès git à `linagora/claude-delegate`.
 
    ```
    /plugin marketplace add linagora/claude-delegate
    /plugin install delegate@claude-delegate
    ```
 
-2. **Te connecter une fois à Anthropic**, dans un dossier de configuration dédié et vierge. N'y crée aucun lien vers `~/.claude` : la session déléguée ne doit hériter ni de tes réglages, ni de tes plugins.
+3. **Te connecter une fois à Anthropic**, dans un dossier de configuration dédié et vierge. N'y crée aucun lien vers `~/.claude` : la session déléguée ne doit hériter ni de tes réglages, ni de tes plugins. Cette session ne sert qu'à la connexion : n'y installe rien.
 
    ```bash
    mkdir -m 700 ~/.claude-anthropic
@@ -22,15 +52,7 @@ Prérequis : Claude Code (de préférence le binaire natif, `~/.local/bin/claude
 
    Sous macOS, Claude Code range ces identifiants dans le trousseau, sous une clé propre à ce dossier. Sous Linux, il les range dans le dossier lui-même.
 
-3. **Relever le timeout des commandes `!`**, seulement pour les sessions DeepSeek. Une revue Opus dépasse souvent les 2 minutes par défaut. Ajoute la ligne là où tu exportes les variables DeepSeek (`ANTHROPIC_BASE_URL`…), par exemple dans une fonction de lancement :
-
-   ```bash
-   export BASH_DEFAULT_TIMEOUT_MS=900000   # 15 min
-   ```
-
-   Ne la mets pas dans un `~/.claude/settings.json` partagé avec tes sessions Anthropic : elle s'appliquerait à tous leurs appels Bash.
-
-4. **Vérifier l'isolation** du relecteur, après l'installation puis après chaque mise à jour de Claude Code :
+4. **Vérifier l'isolation** du relecteur, depuis une session `claude-deepseek`, après l'installation puis après chaque mise à jour de Claude Code :
 
    ```
    /delegate:selftest
