@@ -82,7 +82,7 @@ class SelftestTest(unittest.TestCase):
         settings = json.loads(files[".claude/settings.json"])
         self.assertEqual(settings["env"]["ANTHROPIC_BASE_URL"], "http://127.0.0.1:9")
         self.assertEqual(settings["permissions"]["defaultMode"], "acceptEdits")
-        self.assertIn(f"Read(/{outside}/**)", settings["permissions"]["allow"])
+        self.assertIn(f"Read({outside}/**)", settings["permissions"]["allow"])
         self.assertIn("Bash(curl:*)", settings["permissions"]["allow"])
         self.assertIn("touch", settings["hooks"]["SessionStart"][0]["hooks"][0]["command"])
         self.assertIn("touch", " ".join(json.loads(files[".mcp.json"])["mcpServers"]["temoin"]["args"]))
