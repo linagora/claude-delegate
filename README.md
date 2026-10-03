@@ -4,44 +4,31 @@ Plugin Claude Code qui délègue les revues de code d'une session branchée sur 
 
 ## Installation
 
-Prérequis : Claude Code (de préférence le binaire natif, `~/.local/bin/claude`), git, Python 3.9 ou plus récent, une clé API DeepSeek pour tes sessions de travail ([platform.deepseek.com](https://platform.deepseek.com/api_keys)) et un abonnement Claude pour le relecteur. Pour relire des pull requests, il faut aussi GitHub CLI (`gh`) ou, pour les merge requests GitLab, GitLab CLI (`glab`).
+Prérequis : Claude Code (de préférence le binaire natif, `~/.local/bin/claude`), git, Python 3.9 ou plus récent, une clé de l'AI Gateway de LINAGORA pour tes sessions de travail et un abonnement Claude pour le relecteur. Pour relire des pull requests, il faut aussi GitHub CLI (`gh`) ou, pour les merge requests GitLab, GitLab CLI (`glab`).
 
-1. **Lancer Claude Code sur DeepSeek.** DeepSeek expose une API compatible avec celle d'Anthropic, à laquelle Claude Code se branche par des variables d'environnement. Ne les mets ni dans `~/.zshenv`, ni dans un `settings.json` : toutes tes sessions partiraient chez DeepSeek, y compris celles que tu veux garder sur Anthropic. Définis-les dans une fonction de lancement, par exemple dans `~/.zshrc` :
+Toutes les étapes se font depuis un terminal.
 
-   ```bash
-   claude-deepseek() {
-     ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic \
-     ANTHROPIC_AUTH_TOKEN="$(security find-generic-password -s deepseek-api-key -w)" \
-     ANTHROPIC_MODEL='deepseek-flash[1m]' \
-     ANTHROPIC_DEFAULT_OPUS_MODEL='deepseek-flash[1m]' \
-     ANTHROPIC_DEFAULT_SONNET_MODEL='deepseek-flash[1m]' \
-     ANTHROPIC_DEFAULT_HAIKU_MODEL=deepseek-flash \
-     CLAUDE_CODE_SUBAGENT_MODEL=deepseek-flash \
-     CLAUDE_CODE_EFFORT_LEVEL=max \
-     CLAUDE_CODE_AUTO_COMPACT_WINDOW=786432 \
-     BASH_DEFAULT_TIMEOUT_MS=900000 \
-     claude "$@"
-   }
-   ```
-
-   Les valeurs suivent la [documentation de DeepSeek pour Claude Code](https://api-docs.deepseek.com/quick_start/agent_integrations/claude_code) : reprends-les si elle évolue. `BASH_DEFAULT_TIMEOUT_MS` porte le timeout des commandes `!` à 15 minutes, car une revue Opus dépasse souvent les 2 minutes par défaut. Le relecteur délégué, lui, n'hérite d'aucune de ces variables.
-
-   La clé API reste dans le trousseau, jamais en clair dans un fichier. Sous macOS, range-la une fois, la commande la demande :
+1. **Ajouter la marketplace et installer le plugin.** Le dépôt est privé : il faut un accès git à `linagora/claude-delegate`.
 
    ```bash
-   security add-generic-password -a "$USER" -s deepseek-api-key -w
+   claude plugin marketplace add linagora/claude-delegate
+   claude plugin install delegate@claude-delegate
    ```
 
-   Sous Linux, range-la avec `secret-tool store --label=DeepSeek service deepseek-api-key` (paquet `libsecret-tools`), et lis-la dans la fonction avec `"$(secret-tool lookup service deepseek-api-key)"`.
+2. **Installer le lanceur `claude-deepseek`**, qui ouvre Claude Code sur DeepSeek par l'AI Gateway de LINAGORA (`https://ai-api.linagora.com`, modèle `deepseek-v4.1-flash`). La marketplace a cloné le dépôt : un lien suffit, et le lanceur suit les mises à jour de la marketplace. Range ensuite ta clé du gateway dans le trousseau, la commande la demande :
 
-   Ouvre ensuite tes sessions de travail avec `claude-deepseek`, et vérifie avec `/status` qu'elles utilisent bien le modèle DeepSeek.
-
-2. **Installer le plugin**, depuis une session `claude-deepseek`. Il s'installe dans ta configuration utilisateur (`~/.claude`), que partagent tes sessions DeepSeek et Anthropic. Le dépôt est privé : il faut un accès git à `linagora/claude-delegate`.
-
+   ```bash
+   ln -s ~/.claude/plugins/marketplaces/claude-delegate/bin/claude-deepseek ~/.local/bin/claude-deepseek
+   security add-generic-password -a "$USER" -s linagora-ai-api-key -w
    ```
-   /plugin marketplace add linagora/claude-delegate
-   /plugin install delegate@claude-delegate
-   ```
+
+   Sous Linux, range la clé avec `secret-tool store --label="AI Gateway LINAGORA" service linagora-ai-api-key` (paquet `libsecret-tools`). Sur un serveur sans trousseau, exporte-la plutôt dans `LINAGORA_API_KEY`.
+
+   Ouvre ensuite tes sessions de travail avec `claude-deepseek`. Le lanceur ne règle ses variables que pour la session qu'il ouvre : tes autres sessions restent sur Anthropic.
+   - Il fait pointer tous les modèles (principal, Opus, Sonnet, Haiku et sous-agents) vers celui du gateway, car une clé du gateway n'en atteint aucun autre.
+   - Il porte le timeout des commandes `!` à 15 minutes : une revue Opus dépasse souvent les 2 minutes par défaut.
+   - Claude Code ne connaît pas ce modèle : le coût qu'il affiche est faux, seule compte la facturation du gateway.
+   - Pour passer par l'API de DeepSeek elle-même, positionne `CLAUDE_DEEPSEEK_BASE_URL`, `CLAUDE_DEEPSEEK_MODEL` et `CLAUDE_DEEPSEEK_KEY_SERVICE`, d'après la [documentation de DeepSeek pour Claude Code](https://api-docs.deepseek.com/quick_start/agent_integrations/claude_code).
 
 3. **Te connecter une fois à Anthropic**, dans un dossier de configuration dédié et vierge. N'y crée aucun lien vers `~/.claude` : la session déléguée ne doit hériter ni de tes réglages, ni de tes plugins. Cette session ne sert qu'à la connexion : n'y installe rien.
 
@@ -203,4 +190,4 @@ python3 -m unittest discover -s tests -t .
 claude plugin validate --strict . && claude plugin validate --strict plugins/delegate
 ```
 
-Les tests appellent le CLI comme un processus, dans de vrais dépôts git temporaires, avec un faux `claude` et un faux `gh` ou `glab`. Une pull request y vit dans un dépôt nu local qui sert d'`origin`, auquel une règle `url.insteadOf` donne une URL GitHub ou GitLab. Les tests ne font ni appel réseau ni appel de modèle.
+Les tests appellent le CLI comme un processus, dans de vrais dépôts git temporaires, avec un faux `claude` et un faux `gh` ou `glab`. Une pull request y vit dans un dépôt nu local qui sert d'`origin`, auquel une règle `url.insteadOf` donne une URL GitHub ou GitLab. Le lanceur `claude-deepseek` est testé de la même façon, avec de faux `claude`, `security`, `secret-tool` et `uname`. Les tests ne font ni appel réseau ni appel de modèle.
