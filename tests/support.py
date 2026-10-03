@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -290,7 +291,7 @@ class FeatureBranchTestCase(unittest.TestCase):
         self.sb.commit_all("feature change")
 
 
-_FAKE_GH_SCRIPT = '''#!{python}
+_FAKE_FORGE_CLI_SCRIPT = '''#!{python}
 import json, sys
 from pathlib import Path
 
@@ -304,14 +305,17 @@ sys.exit(reply["exit_code"])
 '''
 
 
-class FakeGh:
-    """Stand-in for `gh`, placed first on the PATH: records each call, replies with a canned result."""
+class FakeForgeCli:
+    """Stand-in for `gh` or `glab`, placed first on the PATH: records each call,
+    replies with a canned result."""
 
-    def __init__(self, directory: Path) -> None:
+    def __init__(self, directory: Path, name: str) -> None:
         directory.mkdir(parents=True)
         self.directory = directory
-        path = directory / "gh"
-        path.write_text(_FAKE_GH_SCRIPT.format(python=sys.executable, directory=str(directory)), encoding="utf-8")
+        path = directory / name
+        path.write_text(
+            _FAKE_FORGE_CLI_SCRIPT.format(python=sys.executable, directory=str(directory)), encoding="utf-8"
+        )
         path.chmod(0o755)
         self.reply({})
 
@@ -329,11 +333,30 @@ class FakeGh:
         return recorded_calls(self.directory)
 
 
+#: Why the reviewer requests changes in `pr_review_result`.
+VERDICT_REASON = "La division par zéro reste mal gérée."
+
+
+def pr_review_result(verdict: Any = "REQUEST_CHANGES", reason: str = VERDICT_REASON) -> Dict[str, Any]:
+    """A pull request review as the real Claude Code returns it."""
+    return structured_result(
+        {
+            "summary": "La PR traite la division par zéro.",
+            "verdict": verdict,
+            "verdict_reason": reason,
+            "findings": [SAMPLE_FINDING],
+        }
+    )
+
+
 class PullRequestTestCase(unittest.TestCase):
     """A repository whose origin looks like GitHub, holding pull request #7 from a contributor."""
 
     NUMBER = "7"
     URL = "https://github.com/acme/app.git"
+    #: The forge's CLI, and where it publishes the head of a pull request.
+    CLI = "gh"
+    REF = "refs/pull/{number}/head"
 
     def setUp(self) -> None:
         self.sb = Sandbox()
@@ -346,15 +369,16 @@ class PullRequestTestCase(unittest.TestCase):
         self.sb.git("push", "-q", "origin", "main")
         self.contributor = self.sb.root / "contributor"
         self.sb.git("clone", "-q", str(self.origin), str(self.contributor), cwd=self.sb.root)
-        self.gh = FakeGh(self.sb.root / "gh-bin")
+        self.forge_cli = FakeForgeCli(self.sb.root / "forge-bin", self.CLI)
         self.update_pull_request({"app.py": "def div(a, b):\n    return a / b if b else PR_CHANGE\n"})
 
     def update_pull_request(self, files: Dict[str, str]) -> None:
         """Commit `files` on top of origin's main in the contributor's clone and
-        publish them as refs/pull/7/head only, as from a fork: the repository
-        under review only gets them by fetching. gh then describes that head."""
-        self.head = self._publish_from_contributor(files, f"refs/pull/{self.NUMBER}/head")
-        self.gh.reply(self.metadata())
+        publish them as the pull request's head only, as from a fork: the
+        repository under review only gets them by fetching. The forge's CLI
+        then describes that head."""
+        self.head = self._publish_from_contributor(files, self.REF.format(number=self.NUMBER))
+        self.forge_cli.reply(self.metadata())
 
     def move_target_branch(self, files: Dict[str, str]) -> None:
         """Someone else merges `files` into main on the forge."""
@@ -383,8 +407,18 @@ class PullRequestTestCase(unittest.TestCase):
             **fields,
         }
 
-    def path_with_gh(self) -> str:
-        return f"{self.gh.directory}{os.pathsep}{os.environ['PATH']}"
+    def path_with_forge_cli(self) -> str:
+        return f"{self.forge_cli.directory}{os.pathsep}{os.environ['PATH']}"
+
+    def path_with_only_git(self) -> str:
+        """A PATH holding git and nothing else: no forge CLI at all."""
+        only_git = self.sb.root / "only-git"
+        if not only_git.exists():
+            only_git.mkdir()
+            git = shutil.which("git")
+            assert git is not None
+            (only_git / "git").symlink_to(git)
+        return str(only_git)
 
     def run_pr(self, *args: str) -> subprocess.CompletedProcess[str]:
-        return self.sb.run("pr-review", self.NUMBER, *args, extra_env={"PATH": self.path_with_gh()})
+        return self.sb.run("pr-review", self.NUMBER, *args, extra_env={"PATH": self.path_with_forge_cli()})
