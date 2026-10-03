@@ -7,7 +7,7 @@ import json
 import re
 import subprocess
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlsplit
 
 from .errors import EXIT_PREPARATION, DelegateError
@@ -71,26 +71,10 @@ def pull_request(origin_url: Optional[str], number: int) -> PullRequest:
             f"forge non reconnue : origin ({where}) n'est pas sur {GITHUB}, seule forge prise en charge",
             EXIT_PREPARATION,
         )
-    command = ["gh", "pr", "view", str(number), "--repo", f"{GITHUB}/{remote.path}", "--json", ",".join(_FIELDS)]
-    try:
-        done = subprocess.run(
-            command, capture_output=True, encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL
-        )
-    except OSError:
-        raise DelegateError(
-            "gh introuvable : installe GitHub CLI (https://cli.github.com), puis lance gh auth login",
-            EXIT_PREPARATION,
-        ) from None
-    if done.returncode != 0:
-        raise DelegateError(
-            f"gh ne peut pas lire la pull request #{number} : {done.stderr.strip()}", EXIT_PREPARATION
-        )
-    try:
-        data = json.loads(done.stdout)
-    except ValueError:
-        data = None
-    if not isinstance(data, dict) or not all(isinstance(data.get(field), str) for field in _FIELDS):
-        raise DelegateError(f"réponse inattendue de gh pour la pull request #{number}", EXIT_PREPARATION)
+    what = f"la pull request #{number}"
+    data = _query(["pr", "view", str(number), "--repo", f"{GITHUB}/{remote.path}", "--json", ",".join(_FIELDS)], what)
+    if not all(isinstance(data.get(field), str) for field in _FIELDS):
+        raise _unexpected(what)
     return PullRequest(
         number=number,
         title=data["title"],
@@ -100,3 +84,29 @@ def pull_request(origin_url: Optional[str], number: int) -> PullRequest:
         url=data["url"],
         ref=f"refs/pull/{number}/head",
     )
+
+
+def _query(args: List[str], what: str) -> Dict[str, Any]:
+    """The JSON object gh prints about `what`."""
+    try:
+        done = subprocess.run(
+            ["gh", *args], capture_output=True, encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL
+        )
+    except OSError:
+        raise DelegateError(
+            "gh introuvable : installe GitHub CLI (https://cli.github.com), puis lance gh auth login",
+            EXIT_PREPARATION,
+        ) from None
+    if done.returncode != 0:
+        raise DelegateError(f"gh ne peut pas lire {what} : {done.stderr.strip()}", EXIT_PREPARATION)
+    try:
+        data = json.loads(done.stdout)
+    except ValueError:
+        data = None
+    if not isinstance(data, dict):
+        raise _unexpected(what)
+    return data
+
+
+def _unexpected(what: str) -> DelegateError:
+    return DelegateError(f"réponse inattendue de gh pour {what}", EXIT_PREPARATION)
