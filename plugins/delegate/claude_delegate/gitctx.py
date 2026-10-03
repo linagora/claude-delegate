@@ -65,12 +65,8 @@ class PullRequestContext:
         """The pull request as its author presents it, then its diff."""
         pr = self.pull_request
         return (
-            f"{pr.label.capitalize()} : {pr.title}\n"
-            f"URL : {pr.url}\n"
-            f"Branche cible : {pr.base}\n"
-            f"Tête : {pr.head}\n"
-            f"Fichiers non relus : {', '.join(self.unreviewed) or 'aucun'}\n"
-            f"\n--- Début de la description de la {pr.forge.term} ---\n"
+            pull_request_header(pr, self.unreviewed)
+            + f"\n--- Début de la description de la {pr.forge.term} ---\n"
             f"{pr.body.strip() or '(aucune description)'}\n"
             f"--- Fin de la description de la {pr.forge.term} ---\n"
             f"\n--- Début du diff, du merge-base avec {pr.base} jusqu'à la tête ---\n"
@@ -93,6 +89,17 @@ class RecheckContext:
     diff: str
     #: The root CLAUDE.md at the merge-base, never from the reviewed work.
     conventions: Optional[str]
+
+
+def pull_request_header(pr: forge.PullRequest, unreviewed: List[str]) -> str:
+    """What the reviewer reads first about a pull request."""
+    return (
+        f"{pr.label.capitalize()} : {pr.title}\n"
+        f"URL : {pr.url}\n"
+        f"Branche cible : {pr.base}\n"
+        f"Tête : {pr.head}\n"
+        f"Fichiers non relus : {', '.join(unreviewed) or 'aucun'}\n"
+    )
 
 
 def hostile_context(cwd: Path, base: Optional[str]) -> HostileContext:
