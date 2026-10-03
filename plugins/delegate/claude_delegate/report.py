@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from . import __version__
 from .delegate import Execution
+from .forge import PullRequest
 from .gitctx import HostileContext, PullRequestContext, RecheckContext
 from .interpret import Finding, Review, Status
 from .schemas import SEVERITIES
@@ -53,13 +54,7 @@ def pr_subject(ctx: PullRequestContext) -> Subject:
         kind=PULL_REQUEST,
         slug=f"{PULL_REQUEST}-{pr.number}",
         title=f"Revue de {pr.forge.term}",
-        rows=[
-            (pr.forge.term.capitalize(), f"{pr.reference} {pr.url}"),
-            ("Branche cible", pr.base),
-            # In full: DeepSeek reads the reviewed files at this commit.
-            ("Tête", pr.head),
-            ("Fichiers non relus", ", ".join(ctx.unreviewed) or "aucun"),
-        ],
+        rows=_pull_request_rows(pr, ctx.unreviewed),
         fields={
             "forge": pr.forge.name,
             "pr_number": pr.number,
@@ -154,6 +149,16 @@ class Report:
 def _cell(text: str) -> str:
     """Keep a value inside its Markdown table cell."""
     return " ".join(text.split()).replace("|", "\\|")
+
+
+def _pull_request_rows(pr: PullRequest, unreviewed: List[str]) -> List[Tuple[str, str]]:
+    return [
+        (pr.forge.term.capitalize(), f"{pr.reference} {pr.url}"),
+        ("Branche cible", pr.base),
+        # In full: DeepSeek reads the reviewed files at this commit.
+        ("Tête", pr.head),
+        ("Fichiers non relus", ", ".join(unreviewed) or "aucun"),
+    ]
 
 
 def _base_row(base: str, merge_base: str) -> Tuple[str, str]:
