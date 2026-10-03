@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import unittest
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Sequence
 
 from tests.support import (
     NEW_FINDING,
@@ -13,6 +13,7 @@ from tests.support import (
     option,
     recheck_result,
     report_path,
+    rewrite_companion,
     success,
 )
 
@@ -49,11 +50,6 @@ class RecheckTest(FeatureBranchTestCase):
         self.sb.commit_all("fix")
         self.sb.write("nouveau.py", "FIXED_UNTRACKED = 1\n")
         return report
-
-    def edit_companion(self, report: Path, **fields: Any) -> None:
-        companion = report.with_suffix(".json")
-        record = json.loads(companion.read_text(encoding="utf-8"))
-        companion.write_text(json.dumps({**record, **fields}), encoding="utf-8")
 
     def assert_refused(self, args: Sequence[str], message: str) -> None:
         """The recheck stops before calling the reviewer, saying `message`."""
@@ -231,13 +227,13 @@ class RecheckTest(FeatureBranchTestCase):
 
     def test_a_malformed_report_is_refused(self) -> None:
         report = self.review_then_fix()
-        self.edit_companion(report, reviewed_revision="--output=/tmp/x")
+        rewrite_companion(report, reviewed_revision="--output=/tmp/x")
 
         self.assert_refused([], "rapport illisible")
 
     def test_a_pull_request_report_is_not_rechecked_yet(self) -> None:
         report = self.review_then_fix()
-        self.edit_companion(report, type="pr")
+        rewrite_companion(report, type="pr")
 
         self.assert_refused([], "pull request")
 

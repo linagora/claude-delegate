@@ -141,6 +141,13 @@ def recorded_calls(directory: Path) -> List[Any]:
     return [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
 
 
+def rewrite_companion(report: Path, **fields: Any) -> None:
+    """Change fields of a report's JSON companion, as a corrupted or older one would read."""
+    companion = report.with_suffix(".json")
+    record = json.loads(companion.read_text(encoding="utf-8"))
+    companion.write_text(json.dumps({**record, **fields}), encoding="utf-8")
+
+
 def report_path(stdout: str) -> Path:
     """The archived report announced on the first line of the CLI output."""
     first_line = stdout.partition("\n")[0]
@@ -451,6 +458,10 @@ class PullRequestTestCase(unittest.TestCase):
 
     def run_pr(self, *args: str) -> subprocess.CompletedProcess[str]:
         return self.sb.run("pr-review", self.NUMBER, *args, extra_env={"PATH": self.path_with_forge_cli()})
+
+    def worktrees(self) -> int:
+        """How many worktrees the repository has: 1 when no throwaway one is left."""
+        return self.sb.git("worktree", "list", "--porcelain").count("worktree ")
 
 
 class MergeRequestTestCase(PullRequestTestCase):
