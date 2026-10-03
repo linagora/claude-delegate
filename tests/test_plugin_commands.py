@@ -107,6 +107,9 @@ class PluginCommandsTest(unittest.TestCase):
         )
         self.assertIn("« Constats d'origine »", body)
         self.assertIn("reste bloquant", body)
+        # A recheck of a pull request is checked at its head, without a checkout.
+        self.assertIn("git show", body)
+        self.assertIn("« Fichiers non relus »", body)
 
     def test_handoff_writes_a_dated_brief_without_shell_and_points_to_a_spec_session(self) -> None:
         _, body = parse_command(PLUGIN / "commands" / "handoff.md")

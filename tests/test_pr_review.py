@@ -29,9 +29,6 @@ class PullRequestReviewTest(PullRequestTestCase):
         super().setUp()
         self.sb.fake.reply(pr_review_result())
 
-    def worktrees(self) -> int:
-        return self.sb.git("worktree", "list", "--porcelain").count("worktree ")
-
     def user_state(self) -> List[str]:
         """Everything a review must leave as it is: branch, commit, index, working tree."""
         return [

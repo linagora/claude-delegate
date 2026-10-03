@@ -9,7 +9,7 @@ import shutil
 import subprocess
 import tempfile
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional, Tuple
 
@@ -65,12 +65,8 @@ class PullRequestContext:
         """The pull request as its author presents it, then its diff."""
         pr = self.pull_request
         return (
-            f"{pr.label.capitalize()} : {pr.title}\n"
-            f"URL : {pr.url}\n"
-            f"Branche cible : {pr.base}\n"
-            f"Tête : {pr.head}\n"
-            f"Fichiers non relus : {', '.join(self.unreviewed) or 'aucun'}\n"
-            f"\n--- Début de la description de la {pr.forge.term} ---\n"
+            pull_request_header(pr, self.unreviewed)
+            + f"\n--- Début de la description de la {pr.forge.term} ---\n"
             f"{pr.body.strip() or '(aucune description)'}\n"
             f"--- Fin de la description de la {pr.forge.term} ---\n"
             f"\n--- Début du diff, du merge-base avec {pr.base} jusqu'à la tête ---\n"
@@ -85,14 +81,31 @@ class RecheckContext:
     merge_base: str
     #: The revision the rechecked report read.
     original_revision: str
-    #: The current state, frozen as a hostile review freezes it.
+    #: What the recheck reads: the working tree frozen as a hostile review
+    #: freezes it, or the new head of a pull request.
     reviewed_revision: str
     #: What changed since: from the original revision to the current one.
     gap: str
     #: The full current diff, from the merge-base.
     diff: str
-    #: The root CLAUDE.md at the merge-base, never from the reviewed work.
+    #: The root CLAUDE.md of the trusted revision, never from the reviewed
+    #: work: the merge-base, or the tip of a pull request's target branch.
     conventions: Optional[str]
+    #: For the recheck of a pull request: the pull request at its new head,
+    #: and its changed files the reviewer may not read.
+    pull_request: Optional[forge.PullRequest] = None
+    unreviewed: List[str] = field(default_factory=list)
+
+
+def pull_request_header(pr: forge.PullRequest, unreviewed: List[str]) -> str:
+    """What the reviewer reads first about a pull request."""
+    return (
+        f"{pr.label.capitalize()} : {pr.title}\n"
+        f"URL : {pr.url}\n"
+        f"Branche cible : {pr.base}\n"
+        f"Tête : {pr.head}\n"
+        f"Fichiers non relus : {', '.join(unreviewed) or 'aucun'}\n"
+    )
 
 
 def hostile_context(cwd: Path, base: Optional[str]) -> HostileContext:
@@ -113,28 +126,39 @@ def hostile_context(cwd: Path, base: Optional[str]) -> HostileContext:
 
 
 def recheck_context(root: Path, base: str, original_revision: str) -> RecheckContext:
-    if _commit(root, original_revision) is None:
-        raise DelegateError(
-            f"révision relue par le rapport d'origine introuvable ({original_revision[:12]}), sans doute purgée "
-            "par git : lance une revue complète avec /delegate:hostile-review",
-            EXIT_PREPARATION,
-        )
+    _require_earlier(root, original_revision, "révision relue par le rapport d'origine", "/delegate:hostile-review")
     merge_base = _merge_base(root, base)
-    reviewed_revision = _freeze_working_tree(root)
-    # Possibly empty: fixes may undo the whole change, findings still get ruled.
-    diff = _diff(root, merge_base, reviewed_revision)
-    gap = _reviewable_diff(root, original_revision, reviewed_revision, "aucun changement depuis le rapport d'origine")
-    size = len(gap) + len(diff)
-    if size > MAX_DIFF_CHARS:
-        raise _too_large(size)
-    return RecheckContext(
+    return _recheck(
+        root,
         base=base,
+        target=base,
         merge_base=merge_base,
         original_revision=original_revision,
-        reviewed_revision=reviewed_revision,
-        gap=gap,
-        diff=diff,
-        conventions=trusted_conventions(root, merge_base),
+        reviewed_revision=_freeze_working_tree(root),
+        trusted_revision=merge_base,
+    )
+
+
+def pull_request_recheck_context(root: Path, key: forge.PullRequestKey, original_revision: str) -> RecheckContext:
+    """The pull request at its new head, asked of its forge again and fetched."""
+    fetched = _fetch_pull_request(root, origin_url(root), key.number, key.forge_name)
+    pr = fetched.pull_request
+    # Checked once fetched: the new head may bring the old one back.
+    _require_earlier(
+        root,
+        original_revision,
+        f"ancienne tête de la {pr.label}",
+        f"/delegate:pr-review {key.number} --forge {key.forge_name}",
+    )
+    return _recheck(
+        root,
+        base=pr.base,
+        target=fetched.base_revision,
+        merge_base=fetched.merge_base,
+        original_revision=original_revision,
+        reviewed_revision=pr.head,
+        trusted_revision=fetched.base_revision,
+        pull_request=pr,
     )
 
 
@@ -142,27 +166,17 @@ def pull_request_context(cwd: Path, number: int, forge_name: Optional[str] = Non
     """`forge_name` overrides the forge origin's host points to."""
     root = repository(cwd)
     origin = origin_url(root)
-    pr = forge.pull_request(origin, number, forge_name)
-    base_revision = _fetch(root, f"refs/heads/{pr.base}")
-    head = _fetch(root, pr.ref)
-    if head != pr.head:
-        raise DelegateError(
-            f"la {pr.label} a changé pendant la préparation (tête {pr.head[:12]} selon la forge, "
-            f"{head[:12]} récupérée) : relance la revue",
-            EXIT_PREPARATION,
-        )
-    merge_base = _git_or_none(root, "merge-base", base_revision, head)
-    if merge_base is None:
-        raise DelegateError(f"aucun ancêtre commun entre {pr.base} et la {pr.label}", EXIT_PREPARATION)
+    fetched = _fetch_pull_request(root, origin, number, forge_name)
+    pr, merge_base = fetched.pull_request, fetched.merge_base
     return PullRequestContext(
         root=root,
         origin_url=origin,
         pull_request=pr,
-        base_revision=base_revision,
+        base_revision=fetched.base_revision,
         merge_base=merge_base,
-        diff=_reviewable_diff(root, merge_base, head, f"la {pr.label} ne change rien à {pr.base}"),
-        unreviewed=_unreviewed_changes(root, merge_base, head),
-        conventions=trusted_conventions(root, base_revision),
+        diff=_reviewable_diff(root, merge_base, pr.head, f"la {pr.label} ne change rien à {pr.base}"),
+        unreviewed=_unreviewed_changes(root, merge_base, pr.head),
+        conventions=trusted_conventions(root, fetched.base_revision),
     )
 
 
@@ -220,6 +234,53 @@ def git(cwd: Path, *args: str, strip: bool = True, env: Optional[Dict[str, str]]
     return done.stdout.strip() if strip else done.stdout
 
 
+def _require_earlier(root: Path, revision: str, what: str, full_review: str) -> None:
+    """Stops a recheck whose earlier revision git no longer has."""
+    if _commit(root, revision) is None:
+        raise DelegateError(
+            f"{what} introuvable ({revision[:12]}), sans doute purgée par git : "
+            f"lance une revue complète avec {full_review}",
+            EXIT_PREPARATION,
+        )
+
+
+def _recheck(
+    root: Path,
+    *,
+    base: str,
+    target: str,
+    merge_base: str,
+    original_revision: str,
+    reviewed_revision: str,
+    trusted_revision: str,
+    pull_request: Optional[forge.PullRequest] = None,
+) -> RecheckContext:
+    """What a recheck reads from `original_revision` to `reviewed_revision`,
+    for work on top of `target`, with the conventions of `trusted_revision`."""
+    # Possibly empty: fixes may undo the whole change, findings still get ruled.
+    diff = _diff(root, merge_base, reviewed_revision)
+    # Only the files the work touches, before or after the fixes: what a
+    # rebase or a merge brings from the target stays out.
+    original_base = _git_or_none(root, "merge-base", target, original_revision) or merge_base
+    touched = set(_changed_paths(root, original_base, original_revision))
+    touched |= set(_changed_paths(root, merge_base, reviewed_revision))
+    gap = _reviewable_diff(
+        root, original_revision, reviewed_revision, "aucun changement depuis le rapport d'origine", sorted(touched)
+    )
+    _check_size(gap, diff)
+    return RecheckContext(
+        base=base,
+        merge_base=merge_base,
+        original_revision=original_revision,
+        reviewed_revision=reviewed_revision,
+        gap=gap,
+        diff=diff,
+        conventions=trusted_conventions(root, trusted_revision),
+        pull_request=pull_request,
+        unreviewed=_unreviewed_changes(root, merge_base, reviewed_revision) if pull_request else [],
+    )
+
+
 def _merge_base(root: Path, base: str) -> str:
     """Where the reviewed work starts from `base`: their merge-base with HEAD."""
     if _commit(root, "HEAD") is None:
@@ -237,20 +298,26 @@ def _commit(root: Path, revision: str) -> Optional[str]:
     return _git_or_none(root, "rev-parse", "--verify", "--quiet", f"{revision}^{{commit}}")
 
 
-def _diff(root: Path, start: str, end: str) -> str:
-    """The diff from `start` to `end` that the reviewer receives, without denied files."""
-    diff = git(root, "diff", "--no-color", "--no-ext-diff", start, end, "--", ".", *_DENIED, strip=False)
+def _diff(root: Path, start: str, end: str, paths: Optional[List[str]] = None) -> str:
+    """The diff from `start` to `end` that the reviewer receives, without denied
+    files, and limited to `paths` when given."""
+    if paths is not None and not paths:
+        return ""
+    pathspecs = ["."] if paths is None else [f":(literal){path}" for path in paths]
+    diff = git(root, "diff", "--no-color", "--no-ext-diff", start, end, "--", *pathspecs, *_DENIED, strip=False)
     if len(diff) > MAX_DIFF_CHARS:
         raise _too_large(len(diff))
     return diff
 
 
-def _reviewable_diff(root: Path, start: str, end: str, empty_reason: str) -> str:
-    """The diff from `start` to `end`, which must hold something to review:
-    `empty_reason` says why it does not."""
-    diff = _diff(root, start, end)
+def _reviewable_diff(
+    root: Path, start: str, end: str, empty_reason: str, paths: Optional[List[str]] = None
+) -> str:
+    """The diff from `start` to `end`, limited to `paths` when given, which must
+    hold something to review: `empty_reason` says why it does not."""
+    diff = _diff(root, start, end, paths)
     if not diff.strip():
-        unreviewed = _unreviewed_changes(root, start, end)
+        unreviewed = [name for name in _unreviewed_changes(root, start, end) if paths is None or name in paths]
         if unreviewed:
             raise DelegateError(
                 f"rien à relire : seuls changent des fichiers exclus de la revue ({', '.join(unreviewed)}), "
@@ -261,6 +328,13 @@ def _reviewable_diff(root: Path, start: str, end: str, empty_reason: str) -> str
     return diff
 
 
+def _check_size(*diffs: str) -> None:
+    """Diffs sent together are bounded together."""
+    size = sum(map(len, diffs))
+    if size > MAX_DIFF_CHARS:
+        raise _too_large(size)
+
+
 def _too_large(chars: int) -> DelegateError:
     size, limit = (f"{n:,}".replace(",", " ") for n in (chars, MAX_DIFF_CHARS))
     return DelegateError(
@@ -268,10 +342,46 @@ def _too_large(chars: int) -> DelegateError:
     )
 
 
+def _changed_paths(root: Path, start: str, end: str) -> List[str]:
+    """The files changed from `start` to `end`, renamed ones under both names."""
+    names = git(root, "diff", "--name-only", "-z", "--no-renames", start, end, strip=False)
+    return [name for name in names.split("\0") if name]
+
+
 def _unreviewed_changes(root: Path, start: str, end: str) -> List[str]:
     """Files changed from `start` to `end` that the reviewer may not read."""
     names = git(root, "diff", "--name-only", "-z", start, end, "--", *_ONLY_DENIED, strip=False)
     return [name for name in names.split("\0") if name]
+
+
+@dataclass(frozen=True)
+class _FetchedPullRequest:
+    """A pull request whose head and target branch were fetched."""
+
+    pull_request: forge.PullRequest
+    #: The tip of the target branch on origin.
+    base_revision: str
+    merge_base: str
+
+
+def _fetch_pull_request(
+    root: Path, origin: Optional[str], number: int, forge_name: Optional[str]
+) -> _FetchedPullRequest:
+    """The pull request as its forge describes it, with its head and its target
+    branch fetched, checking the head git gets is the one the forge announces."""
+    pr = forge.pull_request(origin, number, forge_name)
+    base_revision = _fetch(root, f"refs/heads/{pr.base}")
+    head = _fetch(root, pr.ref)
+    if head != pr.head:
+        raise DelegateError(
+            f"la {pr.label} a changé pendant la préparation (tête {pr.head[:12]} selon la forge, "
+            f"{head[:12]} récupérée) : relance la revue",
+            EXIT_PREPARATION,
+        )
+    merge_base = _git_or_none(root, "merge-base", base_revision, head)
+    if merge_base is None:
+        raise DelegateError(f"aucun ancêtre commun entre {pr.base} et la {pr.label}", EXIT_PREPARATION)
+    return _FetchedPullRequest(pull_request=pr, base_revision=base_revision, merge_base=merge_base)
 
 
 def _fetch(root: Path, ref: str) -> str:

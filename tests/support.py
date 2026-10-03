@@ -105,6 +105,29 @@ def structured_result(structured: Dict[str, Any], model: str = "claude-opus-5-5"
     }
 
 
+#: What a recheck finds in `recheck_result`, numbered after the findings it rules on.
+NEW_FINDING = {
+    **SAMPLE_FINDING,
+    "severity": "important",
+    "problem": "Le correctif renvoie une valeur au lieu de lever une erreur",
+}
+
+
+def recheck_result(**statuses: str) -> Dict[str, Any]:
+    """A recheck as the real Claude Code returns it, ruling `statuses` such as
+    F1="traité" and finding NEW_FINDING."""
+    return structured_result(
+        {
+            "summary": "Les corrections tiennent en partie.",
+            "statuses": {
+                finding: {"status": status, "justification": f"Justification de {finding}."}
+                for finding, status in statuses.items()
+            },
+            "findings": [NEW_FINDING],
+        }
+    )
+
+
 def option(argv: List[str], name: str) -> str:
     """The value given to a command-line option."""
     return argv[argv.index(name) + 1]
@@ -116,6 +139,13 @@ def recorded_calls(directory: Path) -> List[Any]:
     if not log.exists():
         return []
     return [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+
+
+def rewrite_companion(report: Path, **fields: Any) -> None:
+    """Change fields of a report's JSON companion, as a corrupted or older one would read."""
+    companion = report.with_suffix(".json")
+    record = json.loads(companion.read_text(encoding="utf-8"))
+    companion.write_text(json.dumps({**record, **fields}), encoding="utf-8")
 
 
 def report_path(stdout: str) -> Path:
@@ -381,14 +411,19 @@ class PullRequestTestCase(unittest.TestCase):
         self.head = self._publish_from_contributor(files, self.REF.format(number=self.NUMBER))
         self.forge_cli.reply(self.metadata())
 
+    def extend_pull_request(self, files: Dict[str, str]) -> None:
+        """The author pushes `files` on top of the pull request's head."""
+        self.head = self._publish_from_contributor(files, self.REF.format(number=self.NUMBER), start=self.head)
+        self.forge_cli.reply(self.metadata())
+
     def move_target_branch(self, files: Dict[str, str]) -> None:
         """Someone else merges `files` into main on the forge."""
         self._publish_from_contributor(files, "refs/heads/main")
 
-    def _publish_from_contributor(self, files: Dict[str, str], ref: str) -> str:
+    def _publish_from_contributor(self, files: Dict[str, str], ref: str, start: str = "origin/main") -> str:
         clone = self.contributor
         self.sb.git("fetch", "-q", "origin", cwd=clone)
-        self.sb.git("switch", "-q", "--detach", "origin/main", cwd=clone)
+        self.sb.git("switch", "-q", "--detach", start, cwd=clone)
         for name, content in files.items():
             path = clone / name
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -428,6 +463,13 @@ class PullRequestTestCase(unittest.TestCase):
 
     def run_pr(self, *args: str) -> subprocess.CompletedProcess[str]:
         return self.sb.run("pr-review", self.NUMBER, *args, extra_env={"PATH": self.path_with_forge_cli()})
+
+    def run_recheck(self, *args: str) -> subprocess.CompletedProcess[str]:
+        return self.sb.run("recheck", *args, extra_env={"PATH": self.path_with_forge_cli()})
+
+    def worktrees(self) -> int:
+        """How many worktrees the repository has: 1 when no throwaway one is left."""
+        return self.sb.git("worktree", "list", "--porcelain").count("worktree ")
 
 
 class MergeRequestTestCase(PullRequestTestCase):

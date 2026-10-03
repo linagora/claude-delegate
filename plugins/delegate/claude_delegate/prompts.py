@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 #: ${CLAUDE_PLUGIN_ROOT} is not exported to the shell, so the CLI finds the
 #: prompt files from its own location.
@@ -18,20 +18,25 @@ def pr_review(conventions: Optional[str]) -> str:
     return _review_prompt("pr-review.md", conventions)
 
 
-def recheck(conventions: Optional[str]) -> str:
-    return _review_prompt("recheck.md", conventions)
+def recheck(conventions: Optional[str], pull_request: bool) -> str:
+    """For a pull request, the rules about its tree apply too."""
+    return _review_prompt("recheck.md", conventions, omit=() if pull_request else ("pull-request",))
 
 
 def selftest() -> str:
     return (PROMPTS / "selftest.md").read_text(encoding="utf-8")
 
 
-def _review_prompt(task_file: str, conventions: Optional[str]) -> str:
+def _review_prompt(task_file: str, conventions: Optional[str], omit: Tuple[str, ...] = ()) -> str:
     """A review task, in which reviews share fragments such as the format of
-    their findings, followed by the project's trusted conventions if any."""
+    their findings (but not those in `omit`), followed by the project's trusted
+    conventions if any."""
     task = (PROMPTS / task_file).read_text(encoding="utf-8")
-    for fragment in ("findings", "security"):
-        task = task.replace(f"{{{fragment}}}", (PROMPTS / f"{fragment}.md").read_text(encoding="utf-8").rstrip())
+    for fragment in ("findings", "security", "pull-request"):
+        if fragment in omit:
+            task = task.replace(f"{{{fragment}}}\n", "")
+        else:
+            task = task.replace(f"{{{fragment}}}", (PROMPTS / f"{fragment}.md").read_text(encoding="utf-8").rstrip())
     task = task.rstrip()
     if not conventions:
         return task + "\n"
