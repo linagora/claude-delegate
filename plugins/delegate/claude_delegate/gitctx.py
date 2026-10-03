@@ -113,29 +113,9 @@ def hostile_context(cwd: Path, base: Optional[str]) -> HostileContext:
 
 
 def recheck_context(root: Path, base: str, original_revision: str) -> RecheckContext:
-    if _commit(root, original_revision) is None:
-        raise DelegateError(
-            f"révision relue par le rapport d'origine introuvable ({original_revision[:12]}), sans doute purgée "
-            "par git : lance une revue complète avec /delegate:hostile-review",
-            EXIT_PREPARATION,
-        )
+    _require_earlier(root, original_revision, "révision relue par le rapport d'origine", "/delegate:hostile-review")
     merge_base = _merge_base(root, base)
-    reviewed_revision = _freeze_working_tree(root)
-    # Possibly empty: fixes may undo the whole change, findings still get ruled.
-    diff = _diff(root, merge_base, reviewed_revision)
-    gap = _reviewable_diff(root, original_revision, reviewed_revision, "aucun changement depuis le rapport d'origine")
-    size = len(gap) + len(diff)
-    if size > MAX_DIFF_CHARS:
-        raise _too_large(size)
-    return RecheckContext(
-        base=base,
-        merge_base=merge_base,
-        original_revision=original_revision,
-        reviewed_revision=reviewed_revision,
-        gap=gap,
-        diff=diff,
-        conventions=trusted_conventions(root, merge_base),
-    )
+    return _recheck(root, base, merge_base, original_revision, _freeze_working_tree(root), merge_base)
 
 
 def pull_request_context(cwd: Path, number: int, forge_name: Optional[str] = None) -> PullRequestContext:
@@ -210,6 +190,36 @@ def git(cwd: Path, *args: str, strip: bool = True, env: Optional[Dict[str, str]]
     return done.stdout.strip() if strip else done.stdout
 
 
+def _require_earlier(root: Path, revision: str, what: str, full_review: str) -> None:
+    """Stops a recheck whose earlier revision git no longer has."""
+    if _commit(root, revision) is None:
+        raise DelegateError(
+            f"{what} introuvable ({revision[:12]}), sans doute purgée par git : "
+            f"lance une revue complète avec {full_review}",
+            EXIT_PREPARATION,
+        )
+
+
+def _recheck(
+    root: Path, base: str, merge_base: str, original_revision: str, reviewed_revision: str, trusted_revision: str
+) -> RecheckContext:
+    """What a recheck reads from `original_revision` to `reviewed_revision`,
+    with the conventions of `trusted_revision`."""
+    # Possibly empty: fixes may undo the whole change, findings still get ruled.
+    diff = _diff(root, merge_base, reviewed_revision)
+    gap = _reviewable_diff(root, original_revision, reviewed_revision, "aucun changement depuis le rapport d'origine")
+    _check_size(gap, diff)
+    return RecheckContext(
+        base=base,
+        merge_base=merge_base,
+        original_revision=original_revision,
+        reviewed_revision=reviewed_revision,
+        gap=gap,
+        diff=diff,
+        conventions=trusted_conventions(root, trusted_revision),
+    )
+
+
 def _merge_base(root: Path, base: str) -> str:
     """Where the reviewed work starts from `base`: their merge-base with HEAD."""
     if _commit(root, "HEAD") is None:
@@ -249,6 +259,13 @@ def _reviewable_diff(root: Path, start: str, end: str, empty_reason: str) -> str
             )
         raise DelegateError(f"rien à relire : {empty_reason}", EXIT_PREPARATION)
     return diff
+
+
+def _check_size(*diffs: str) -> None:
+    """Diffs sent together are bounded together."""
+    size = sum(map(len, diffs))
+    if size > MAX_DIFF_CHARS:
+        raise _too_large(size)
 
 
 def _too_large(chars: int) -> DelegateError:
