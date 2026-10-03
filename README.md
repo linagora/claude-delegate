@@ -102,6 +102,29 @@ La revue ne démarre pas, avec le code de sortie 3, dans ces cas :
 - la pull request a changé pendant la préparation : relance alors la commande ;
 - la pull request n'a aucun ancêtre commun avec sa branche cible, ne change que des fichiers exclus de la revue ou rien du tout, ou son diff dépasse 1 000 000 caractères.
 
+### Re-revoir après corrections
+
+```
+/delegate:recheck [rapport]
+```
+
+Après tes corrections, la commande fait statuer le relecteur sur chaque constat Bloquant ou Important du rapport d'origine : traité, non traité ou mal traité, avec une justification. Il relit aussi tout ce qui a changé depuis la révision relue par ce rapport, pour repérer les régressions introduites par les correctifs.
+
+- Sans argument, la re-revue porte sur le dernier rapport du dépôt. Sinon, désigne un rapport par son identifiant, ou par le chemin de son Markdown ou de son JSON.
+- Une re-revue peut elle-même être re-revue : la suivante statue sur ce qu'elle a laissé ouvert, c'est-à-dire les constats non traités ou mal traités, avec leur dernier statut, et ses nouveaux constats bloquants ou importants. Tu peux ainsi enchaîner corrections et re-revues.
+- Le relecteur reçoit les constats à statuer, l'écart depuis la révision relue par le rapport d'origine et le diff complet courant. L'état courant est figé comme pour une revue hostile, fichiers non suivis compris. Le relecteur tourne avec le modèle de la revue d'origine.
+- Le rapport rappelle chaque constat statué et son statut, puis donne les nouveaux constats, numérotés à la suite de tous les précédents. Son en-tête le relie au rapport d'origine.
+- DeepSeek résume les statuts et liste ce qui reste bloquant.
+
+La re-revue ne démarre pas, avec le code de sortie 3, dans ces cas :
+
+- le rapport est introuvable, illisible, ou concerne un autre dépôt ;
+- rien n'a changé depuis le rapport d'origine ;
+- git a purgé la révision relue par le rapport d'origine : lance alors une revue complète ;
+- l'écart et le diff complet dépassent ensemble 1 000 000 caractères.
+
+La re-revue d'une pull request n'est pas encore prise en charge.
+
 ### Codes de sortie
 
 | Code | Signification |
@@ -119,7 +142,7 @@ En cas d'échec, rien n'est archivé et le message part sur la sortie d'erreur. 
 
 Le rapport (constats Bloquant, Important et Mineur) est archivé dans `${XDG_STATE_HOME:-~/.local/state}/claude-delegate/<dépôt>/`, accompagné d'un JSON. Il est ensuite injecté dans la session. DeepSeek vérifie et classe chaque point sans rien modifier avant ta validation.
 
-Depuis un terminal : `<dossier du plugin>/bin/claude-delegate hostile-review [base]`, ou `pr-review <numéro>`.
+Depuis un terminal : `<dossier du plugin>/bin/claude-delegate hostile-review [base]`, `pr-review <numéro>` ou `recheck [rapport]`.
 
 ### Préparer une spec
 

@@ -46,12 +46,35 @@ class Finding:
     def location(self) -> str:
         return self.file if self.line is None else f"{self.file}:{self.line}"
 
+    @classmethod
+    def from_record(cls, fields: Dict[str, Any], identifier: str) -> "Finding":
+        """A finding from the fields FINDING describes, under `identifier`."""
+        return cls(
+            id=identifier,
+            severity=fields["severity"],
+            file=fields["file"],
+            line=fields["line"],
+            problem=fields["problem"],
+            failure_scenario=fields["failure_scenario"],
+            fix=fields["fix"],
+        )
+
 
 @dataclass(frozen=True)
 class Verdict:
     #: APPROVE or REQUEST_CHANGES.
     decision: str
     reason: str
+
+
+@dataclass(frozen=True)
+class Status:
+    """How a recheck rules on one finding of the original review."""
+
+    finding: Finding
+    #: traité, non traité or mal traité.
+    status: str
+    justification: str
 
 
 @dataclass(frozen=True)
@@ -66,6 +89,8 @@ class Review:
     permission_denials: Optional[List[str]]
     #: Only a pull request review has one.
     verdict: Optional[Verdict] = None
+    #: Only a recheck has them.
+    statuses: Optional[List[Status]] = None
 
 
 def read_result(done: "subprocess.CompletedProcess[str]") -> Dict[str, Any]:
@@ -94,6 +119,17 @@ def read_pr_review(done: "subprocess.CompletedProcess[str]") -> Review:
     return replace(_review(payload, structured), verdict=verdict)
 
 
+def read_recheck(done: "subprocess.CompletedProcess[str]", to_rule_on: List[Finding], first_number: int) -> Review:
+    """A recheck ruling on each finding of `to_rule_on`; its new findings are
+    numbered from `first_number`, after every earlier one."""
+    payload = read_result(done)
+    ids = [finding.id for finding in to_rule_on]
+    structured = _structured_output(payload, lambda value: schemas.is_recheck(value, ids))
+    by_id = structured["statuses"]
+    statuses = [Status(f, by_id[f.id]["status"], by_id[f.id]["justification"]) for f in to_rule_on]
+    return replace(_review(payload, structured, first_number), statuses=statuses)
+
+
 def _structured_output(payload: Dict[str, Any], honours: Callable[[Any], bool]) -> Dict[str, Any]:
     structured = payload.get("structured_output")
     if not isinstance(structured, dict) or not honours(structured):
@@ -101,13 +137,13 @@ def _structured_output(payload: Dict[str, Any], honours: Callable[[Any], bool]) 
     return structured
 
 
-def _review(payload: Dict[str, Any], structured: Dict[str, Any]) -> Review:
+def _review(payload: Dict[str, Any], structured: Dict[str, Any], first_number: int = 1) -> Review:
     cost = payload.get("total_cost_usd")
     duration = payload.get("duration_ms")
     refused = refusals(payload)
     return Review(
         summary=structured["summary"],
-        findings=_numbered(structured["findings"]),
+        findings=_numbered(structured["findings"], first_number),
         model=_model(payload),
         num_turns=_int_or_none(payload.get("num_turns")),
         cost_usd=float(cost) if isinstance(cost, (int, float)) else None,
@@ -168,22 +204,12 @@ def _raise_on_failure(payload: Dict[str, Any], returncode: int) -> None:
     raise DelegateError(f"la revue a échoué : {_excerpt(reason)}")
 
 
-def _numbered(findings: List[Dict[str, Any]]) -> List[Finding]:
+def _numbered(findings: List[Dict[str, Any]], first_number: int) -> List[Finding]:
     """Most severe first (model order kept within a severity), numbered F1, F2…
-    Only the schema fields are kept: an identifier proposed by the model is dropped."""
+    from `first_number`. Only the schema fields are kept: an identifier proposed
+    by the model is dropped."""
     ordered = sorted(findings, key=lambda f: schemas.SEVERITIES.index(f["severity"]))
-    return [
-        Finding(
-            id=f"F{n}",
-            severity=f["severity"],
-            file=f["file"],
-            line=f["line"],
-            problem=f["problem"],
-            failure_scenario=f["failure_scenario"],
-            fix=f["fix"],
-        )
-        for n, f in enumerate(ordered, start=1)
-    ]
+    return [Finding.from_record(f, f"F{n}") for n, f in enumerate(ordered, start=first_number)]
 
 
 def _model(payload: Dict[str, Any]) -> str:

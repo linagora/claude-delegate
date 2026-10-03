@@ -1,5 +1,6 @@
 """What the reviewer reads, prepared from git: the diff to review, the trusted
-conventions and, for a pull request, a throwaway worktree of its code."""
+conventions, what changed since the report a recheck checks and, for a pull
+request, a throwaway worktree of its code."""
 
 from __future__ import annotations
 
@@ -78,16 +79,26 @@ class PullRequestContext:
         )
 
 
+@dataclass(frozen=True)
+class RecheckContext:
+    base: str
+    merge_base: str
+    #: The revision the rechecked report read.
+    original_revision: str
+    #: The current state, frozen as a hostile review freezes it.
+    reviewed_revision: str
+    #: What changed since: from the original revision to the current one.
+    gap: str
+    #: The full current diff, from the merge-base.
+    diff: str
+    #: The root CLAUDE.md at the merge-base, never from the reviewed work.
+    conventions: Optional[str]
+
+
 def hostile_context(cwd: Path, base: Optional[str]) -> HostileContext:
-    root = _repository(cwd)
-    if _git_or_none(root, "rev-parse", "--verify", "--quiet", "HEAD^{commit}") is None:
-        raise DelegateError("le dépôt n'a encore aucun commit", EXIT_PREPARATION)
+    root = repository(cwd)
     base = base or default_base(root)
-    if _git_or_none(root, "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}") is None:
-        raise DelegateError(f"base introuvable : {base}", EXIT_PREPARATION)
-    merge_base = _git_or_none(root, "merge-base", base, "HEAD")
-    if merge_base is None:
-        raise DelegateError(f"aucun ancêtre commun entre {base} et HEAD", EXIT_PREPARATION)
+    merge_base = _merge_base(root, base)
     conventions_text = trusted_conventions(root, merge_base)
     reviewed_revision = _freeze_working_tree(root)
     return HostileContext(
@@ -101,8 +112,34 @@ def hostile_context(cwd: Path, base: Optional[str]) -> HostileContext:
     )
 
 
+def recheck_context(root: Path, base: str, original_revision: str) -> RecheckContext:
+    if _commit(root, original_revision) is None:
+        raise DelegateError(
+            f"révision relue par le rapport d'origine introuvable ({original_revision[:12]}), sans doute purgée "
+            "par git : lance une revue complète avec /delegate:hostile-review",
+            EXIT_PREPARATION,
+        )
+    merge_base = _merge_base(root, base)
+    reviewed_revision = _freeze_working_tree(root)
+    # Possibly empty: fixes may undo the whole change, findings still get ruled.
+    diff = _diff(root, merge_base, reviewed_revision)
+    gap = _reviewable_diff(root, original_revision, reviewed_revision, "aucun changement depuis le rapport d'origine")
+    size = len(gap) + len(diff)
+    if size > MAX_DIFF_CHARS:
+        raise _too_large(size)
+    return RecheckContext(
+        base=base,
+        merge_base=merge_base,
+        original_revision=original_revision,
+        reviewed_revision=reviewed_revision,
+        gap=gap,
+        diff=diff,
+        conventions=trusted_conventions(root, merge_base),
+    )
+
+
 def pull_request_context(cwd: Path, number: int) -> PullRequestContext:
-    root = _repository(cwd)
+    root = repository(cwd)
     origin = origin_url(root)
     pr = forge.pull_request(origin, number)
     base_revision = _fetch(root, f"refs/heads/{pr.base}")
@@ -155,6 +192,14 @@ def default_base(root: Path) -> str:
     return _git_or_none(root, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD") or "main"
 
 
+def repository(cwd: Path) -> Path:
+    """The root of the repository holding `cwd`."""
+    toplevel = _git_or_none(cwd, "rev-parse", "--show-toplevel")
+    if toplevel is None:
+        raise DelegateError(f"pas un dépôt git : {cwd}", EXIT_PREPARATION)
+    return Path(toplevel)
+
+
 def origin_url(root: Path) -> Optional[str]:
     """origin's URL as git reaches it, which resolves insteadOf aliases such as
     gh:owner/name. When a rule rewrites it to a local path (a mirror), the URL
@@ -174,18 +219,35 @@ def git(cwd: Path, *args: str, strip: bool = True, env: Optional[Dict[str, str]]
     return done.stdout.strip() if strip else done.stdout
 
 
-def _repository(cwd: Path) -> Path:
-    """The root of the repository holding `cwd`."""
-    toplevel = _git_or_none(cwd, "rev-parse", "--show-toplevel")
-    if toplevel is None:
-        raise DelegateError(f"pas un dépôt git : {cwd}", EXIT_PREPARATION)
-    return Path(toplevel)
+def _merge_base(root: Path, base: str) -> str:
+    """Where the reviewed work starts from `base`: their merge-base with HEAD."""
+    if _commit(root, "HEAD") is None:
+        raise DelegateError("le dépôt n'a encore aucun commit", EXIT_PREPARATION)
+    if _commit(root, base) is None:
+        raise DelegateError(f"base introuvable : {base}", EXIT_PREPARATION)
+    merge_base = _git_or_none(root, "merge-base", base, "HEAD")
+    if merge_base is None:
+        raise DelegateError(f"aucun ancêtre commun entre {base} et HEAD", EXIT_PREPARATION)
+    return merge_base
+
+
+def _commit(root: Path, revision: str) -> Optional[str]:
+    """The commit `revision` names, or None when it names none."""
+    return _git_or_none(root, "rev-parse", "--verify", "--quiet", f"{revision}^{{commit}}")
+
+
+def _diff(root: Path, start: str, end: str) -> str:
+    """The diff from `start` to `end` that the reviewer receives, without denied files."""
+    diff = git(root, "diff", "--no-color", "--no-ext-diff", start, end, "--", ".", *_DENIED, strip=False)
+    if len(diff) > MAX_DIFF_CHARS:
+        raise _too_large(len(diff))
+    return diff
 
 
 def _reviewable_diff(root: Path, start: str, end: str, empty_reason: str) -> str:
-    """The diff from `start` to `end` that the reviewer receives, without denied
-    files; `empty_reason` says why there is nothing to review when it is empty."""
-    diff = git(root, "diff", "--no-color", "--no-ext-diff", start, end, "--", ".", *_DENIED, strip=False)
+    """The diff from `start` to `end`, which must hold something to review:
+    `empty_reason` says why it does not."""
+    diff = _diff(root, start, end)
     if not diff.strip():
         unreviewed = _unreviewed_changes(root, start, end)
         if unreviewed:
@@ -195,12 +257,14 @@ def _reviewable_diff(root: Path, start: str, end: str, empty_reason: str) -> str
                 EXIT_PREPARATION,
             )
         raise DelegateError(f"rien à relire : {empty_reason}", EXIT_PREPARATION)
-    if len(diff) > MAX_DIFF_CHARS:
-        size, limit = (f"{n:,}".replace(",", " ") for n in (len(diff), MAX_DIFF_CHARS))
-        raise DelegateError(
-            f"diff trop volumineux pour une revue : {size} caractères (maximum {limit})", EXIT_PREPARATION
-        )
     return diff
+
+
+def _too_large(chars: int) -> DelegateError:
+    size, limit = (f"{n:,}".replace(",", " ") for n in (chars, MAX_DIFF_CHARS))
+    return DelegateError(
+        f"diff trop volumineux pour une revue : {size} caractères (maximum {limit})", EXIT_PREPARATION
+    )
 
 
 def _unreviewed_changes(root: Path, start: str, end: str) -> List[str]:

@@ -8,9 +8,13 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from . import __version__
 from .delegate import Execution
-from .gitctx import HostileContext, PullRequestContext
-from .interpret import Finding, Review
+from .gitctx import HostileContext, PullRequestContext, RecheckContext
+from .interpret import Finding, Review, Status
 from .schemas import SEVERITIES
+
+
+#: Report kinds, as their JSON companion records them.
+HOSTILE, PULL_REQUEST, RECHECK = "hostile", "pr", "recheck"
 
 
 @dataclass(frozen=True)
@@ -28,11 +32,11 @@ class Subject:
 
 def hostile_subject(ctx: HostileContext) -> Subject:
     return Subject(
-        kind="hostile",
-        slug="hostile",
+        kind=HOSTILE,
+        slug=HOSTILE,
         title="Revue hostile",
         rows=[
-            ("Base", f"{ctx.base} (merge-base {_short(ctx.merge_base)})"),
+            _base_row(ctx.base, ctx.merge_base),
             ("Révision relue", _short(ctx.reviewed_revision)),
         ],
         fields={
@@ -46,8 +50,8 @@ def hostile_subject(ctx: HostileContext) -> Subject:
 def pr_subject(ctx: PullRequestContext) -> Subject:
     pr = ctx.pull_request
     return Subject(
-        kind="pr",
-        slug=f"pr-{pr.number}",
+        kind=PULL_REQUEST,
+        slug=f"{PULL_REQUEST}-{pr.number}",
         title="Revue de pull request",
         rows=[
             ("Pull request", f"#{pr.number} {pr.url}"),
@@ -68,6 +72,30 @@ def pr_subject(ctx: PullRequestContext) -> Subject:
     )
 
 
+def recheck_subject(original_id: str, ctx: RecheckContext, next_finding_number: int) -> Subject:
+    """`next_finding_number` comes after every finding of the chain of rechecks,
+    those it no longer carries included."""
+    return Subject(
+        kind=RECHECK,
+        slug=RECHECK,
+        title="Re-revue",
+        rows=[
+            ("Rapport d'origine", original_id),
+            _base_row(ctx.base, ctx.merge_base),
+            ("Révision d'origine", _short(ctx.original_revision)),
+            ("Révision relue", _short(ctx.reviewed_revision)),
+        ],
+        fields={
+            "original": original_id,
+            "base": ctx.base,
+            "merge_base": ctx.merge_base,
+            "original_revision": ctx.original_revision,
+            "reviewed_revision": ctx.reviewed_revision,
+            "next_finding_number": next_finding_number,
+        },
+    )
+
+
 @dataclass(frozen=True)
 class Report:
     id: str
@@ -81,7 +109,7 @@ class Report:
         return _render(self.subject.title, self._header(), self.review)
 
     def companion(self) -> Dict[str, Any]:
-        verdict = self.review.verdict
+        verdict, statuses = self.review.verdict, self.review.statuses
         return {
             "id": self.id,
             "type": self.subject.kind,
@@ -100,6 +128,7 @@ class Report:
             "permission_denials": self.review.permission_denials,
             "summary": self.review.summary,
             **({"verdict": verdict.decision, "verdict_reason": verdict.reason} if verdict else {}),
+            **({"statuses": [_status_record(status) for status in statuses]} if statuses is not None else {}),
             "findings": [asdict(finding) for finding in self.review.findings],
         }
 
@@ -124,6 +153,10 @@ class Report:
 def _cell(text: str) -> str:
     """Keep a value inside its Markdown table cell."""
     return " ".join(text.split()).replace("|", "\\|")
+
+
+def _base_row(base: str, merge_base: str) -> Tuple[str, str]:
+    return ("Base", f"{base} (merge-base {_short(merge_base)})")
 
 
 def _short(digest: str) -> str:
@@ -168,11 +201,33 @@ def _render(title: str, header: List[Tuple[str, str]], review: Review) -> str:
     lines += ["", "## Résumé", "", review.summary.strip(), ""]
     if review.verdict:
         lines += ["## Verdict", "", f"{review.verdict.decision} : {review.verdict.reason.strip()}", ""]
+    if review.statuses is not None:
+        lines += ["## Constats d'origine", ""] + _statuses(review.statuses)
     for severity in SEVERITIES:
         lines += [f"## {severity.capitalize()}", ""]
         findings = [f for f in review.findings if f.severity == severity]
         lines += _findings(findings) if findings else ["Rien à signaler.", ""]
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _statuses(statuses: List[Status]) -> List[str]:
+    """Each ruling, with what the original finding was, so that it can be checked."""
+    lines: List[str] = []
+    for status in statuses:
+        finding = status.finding
+        lines += [
+            f"### {finding.id} · {finding.location} ({finding.severity}) : {status.status}",
+            "",
+            f"- **Problème** : {finding.problem}",
+            f"- **Justification** : {status.justification.strip()}",
+            "",
+        ]
+    return lines or ["Aucun constat bloquant ou important à vérifier.", ""]
+
+
+def _status_record(status: Status) -> Dict[str, Any]:
+    """The finding in full, so that a later recheck can rule on it again."""
+    return {**asdict(status.finding), "status": status.status, "justification": status.justification}
 
 
 def _findings(findings: List[Finding]) -> List[str]:

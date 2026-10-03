@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from typing import Any, Dict, Sequence
 
-from tests.support import Sandbox, option, success
+from tests.support import Sandbox, option, structured_result, success
 
 SELFTEST_FAILED = 8
 QUOTA_EXHAUSTED = 4
@@ -22,14 +22,9 @@ def isolated(
     refused_tools: Sequence[str] = (),
 ) -> Dict[str, Any]:
     """What the real Claude Code answers when the isolation holds."""
-    payload = success()
-    payload["structured_output"] = {
-        "codeword": codeword,
-        "outside_file": outside_file,
-        "env_file": env_file,
-        "tools": list(tools),
-    }
-    payload["result"] = json.dumps(payload["structured_output"])
+    payload = structured_result(
+        {"codeword": codeword, "outside_file": outside_file, "env_file": env_file, "tools": list(tools)}
+    )
     payload["permission_denials"] = [
         {"tool_name": "Read", "tool_use_id": f"t{n}", "tool_input": {"file_path": path}}
         for n, path in enumerate(denied)

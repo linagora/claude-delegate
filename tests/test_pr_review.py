@@ -16,6 +16,7 @@ from tests.support import (
     interrupt_review,
     option,
     report_path,
+    structured_result,
     success,
 )
 
@@ -28,16 +29,14 @@ REASON = "La division par zéro reste mal gérée."
 
 def reviewed(verdict: Any = "REQUEST_CHANGES", reason: str = REASON) -> Dict[str, Any]:
     """A pull request review as the real Claude Code returns it."""
-    payload = success()
-    structured = {
-        "summary": "La PR traite la division par zéro.",
-        "verdict": verdict,
-        "verdict_reason": reason,
-        "findings": [SAMPLE_FINDING],
-    }
-    payload["structured_output"] = structured
-    payload["result"] = json.dumps(structured)
-    return payload
+    return structured_result(
+        {
+            "summary": "La PR traite la division par zéro.",
+            "verdict": verdict,
+            "verdict_reason": reason,
+            "findings": [SAMPLE_FINDING],
+        }
+    )
 
 
 class PullRequestReviewTest(PullRequestTestCase):

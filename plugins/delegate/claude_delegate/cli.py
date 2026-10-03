@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
-from . import __version__, archive, delegate, gitctx, interpret, prompts, report, schemas, selftest
+from . import __version__, archive, delegate, gitctx, interpret, prompts, recheck, report, schemas, selftest
 from .errors import EXIT_SELFTEST, DelegateError
 
 
@@ -28,6 +28,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     pull_request = commands.add_parser("pr-review", help="Revue d'une pull request GitHub, sur son propre code.")
     pull_request.add_argument("number", type=_pull_request_number, help="Numéro de la pull request.")
     _add_model_option(pull_request)
+    recheck_command = commands.add_parser(
+        "recheck", help="Re-revue après corrections : statue sur chaque constat de la revue d'origine."
+    )
+    recheck_command.add_argument(
+        "report", nargs="?", help="Identifiant ou chemin du rapport (défaut : le dernier rapport du dépôt)."
+    )
     commands.add_parser(
         "selftest",
         help="Vérifie sur le vrai Claude Code que le relecteur reste isolé (Haiku, quelques centimes).",
@@ -39,6 +45,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return _selftest()
         if args.command == "pr-review":
             return _pr_review(args.number, args.model)
+        if args.command == "recheck":
+            return _recheck(args.report)
         return _hostile_review(args.base, args.model)
     except DelegateError as error:
         print(f"claude-delegate : {error}", file=sys.stderr)
@@ -87,6 +95,24 @@ def _pr_review(number: int, model: str) -> int:
         )
     review = interpret.read_pr_review(done)
     return _publish(archive.repo_key(ctx.root, ctx.origin_url), report.pr_subject(ctx), execution, review)
+
+
+def _recheck(designation: Optional[str]) -> int:
+    root = gitctx.repository(Path.cwd())
+    repo = archive.repo_key(root, gitctx.origin_url(root))
+    earlier = recheck.report_to_recheck(repo, designation)
+    ctx = gitctx.recheck_context(root, earlier.base, earlier.reviewed_revision)
+    done, execution = delegate.launch(
+        root,
+        recheck.reviewer_input(earlier, ctx),
+        schemas.recheck([finding.id for finding in earlier.open_findings]),
+        prompts.recheck(ctx.conventions),
+        "Re-revue des corrections décrites sur l'entrée standard.",
+        model=earlier.requested_model,
+    )
+    review = interpret.read_recheck(done, earlier.open_findings, earlier.next_number)
+    subject = report.recheck_subject(earlier.id, ctx, earlier.next_number + len(review.findings))
+    return _publish(repo, subject, execution, review)
 
 
 def _publish(repo: str, subject: report.Subject, execution: delegate.Execution, review: interpret.Review) -> int:
