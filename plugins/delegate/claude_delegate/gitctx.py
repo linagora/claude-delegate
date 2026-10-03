@@ -142,27 +142,17 @@ def pull_request_context(cwd: Path, number: int, forge_name: Optional[str] = Non
     """`forge_name` overrides the forge origin's host points to."""
     root = repository(cwd)
     origin = origin_url(root)
-    pr = forge.pull_request(origin, number, forge_name)
-    base_revision = _fetch(root, f"refs/heads/{pr.base}")
-    head = _fetch(root, pr.ref)
-    if head != pr.head:
-        raise DelegateError(
-            f"la {pr.label} a changé pendant la préparation (tête {pr.head[:12]} selon la forge, "
-            f"{head[:12]} récupérée) : relance la revue",
-            EXIT_PREPARATION,
-        )
-    merge_base = _git_or_none(root, "merge-base", base_revision, head)
-    if merge_base is None:
-        raise DelegateError(f"aucun ancêtre commun entre {pr.base} et la {pr.label}", EXIT_PREPARATION)
+    fetched = _fetch_pull_request(root, origin, number, forge_name)
+    pr, merge_base = fetched.pull_request, fetched.merge_base
     return PullRequestContext(
         root=root,
         origin_url=origin,
         pull_request=pr,
-        base_revision=base_revision,
+        base_revision=fetched.base_revision,
         merge_base=merge_base,
-        diff=_reviewable_diff(root, merge_base, head, f"la {pr.label} ne change rien à {pr.base}"),
-        unreviewed=_unreviewed_changes(root, merge_base, head),
-        conventions=trusted_conventions(root, base_revision),
+        diff=_reviewable_diff(root, merge_base, pr.head, f"la {pr.label} ne change rien à {pr.base}"),
+        unreviewed=_unreviewed_changes(root, merge_base, pr.head),
+        conventions=trusted_conventions(root, fetched.base_revision),
     )
 
 
@@ -272,6 +262,36 @@ def _unreviewed_changes(root: Path, start: str, end: str) -> List[str]:
     """Files changed from `start` to `end` that the reviewer may not read."""
     names = git(root, "diff", "--name-only", "-z", start, end, "--", *_ONLY_DENIED, strip=False)
     return [name for name in names.split("\0") if name]
+
+
+@dataclass(frozen=True)
+class _FetchedPullRequest:
+    """A pull request whose head and target branch were fetched."""
+
+    pull_request: forge.PullRequest
+    #: The tip of the target branch on origin.
+    base_revision: str
+    merge_base: str
+
+
+def _fetch_pull_request(
+    root: Path, origin: Optional[str], number: int, forge_name: Optional[str]
+) -> _FetchedPullRequest:
+    """The pull request as its forge describes it, with its head and its target
+    branch fetched, checking the head git gets is the one the forge announces."""
+    pr = forge.pull_request(origin, number, forge_name)
+    base_revision = _fetch(root, f"refs/heads/{pr.base}")
+    head = _fetch(root, pr.ref)
+    if head != pr.head:
+        raise DelegateError(
+            f"la {pr.label} a changé pendant la préparation (tête {pr.head[:12]} selon la forge, "
+            f"{head[:12]} récupérée) : relance la revue",
+            EXIT_PREPARATION,
+        )
+    merge_base = _git_or_none(root, "merge-base", base_revision, head)
+    if merge_base is None:
+        raise DelegateError(f"aucun ancêtre commun entre {pr.base} et la {pr.label}", EXIT_PREPARATION)
+    return _FetchedPullRequest(pull_request=pr, base_revision=base_revision, merge_base=merge_base)
 
 
 def _fetch(root: Path, ref: str) -> str:
