@@ -30,7 +30,7 @@ def _review_prompt(task_file: str, conventions: Optional[str]) -> str:
     """A review task, in which reviews share fragments such as the format of
     their findings, followed by the project's trusted conventions if any."""
     task = (PROMPTS / task_file).read_text(encoding="utf-8")
-    for fragment in ("findings", "security"):
+    for fragment in ("findings", "security", "pull-request"):
         task = task.replace(f"{{{fragment}}}", (PROMPTS / f"{fragment}.md").read_text(encoding="utf-8").rstrip())
     task = task.rstrip()
     if not conventions:
