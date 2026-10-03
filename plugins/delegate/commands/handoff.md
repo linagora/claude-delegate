@@ -1,7 +1,6 @@
 ---
-description: Rédige un brief pour préparer une session de spec sur Anthropic (grill-me, puis to-spec)
+description: Rédige un brief pour préparer une session de spec sur Anthropic (grill-me, puis to-spec). À déclencher quand l'utilisateur veut préparer une session de spécification à partir de la conversation en cours.
 argument-hint: "<sujet>"
-disable-model-invocation: true
 ---
 
 Rédige un brief de passage de relais sur ce sujet : $ARGUMENTS

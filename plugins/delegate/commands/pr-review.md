@@ -1,8 +1,7 @@
 ---
-description: Revue d'une pull request GitHub ou d'une merge request GitLab sur son propre code, déléguée à Claude (Opus par défaut) dans une session isolée
+description: Revue d'une pull request GitHub ou d'une merge request GitLab sur son propre code, déléguée à Claude (Opus par défaut) dans une session isolée. À déclencher quand l'utilisateur demande de relire une pull request ou une merge request avant de la publier ou de la fusionner.
 argument-hint: "<numéro> [--forge github|gitlab] [--model sonnet]"
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/bin/claude-delegate pr-review:*)
-disable-model-invocation: true
 ---
 
 !`${CLAUDE_PLUGIN_ROOT}/bin/claude-delegate pr-review $ARGUMENTS`
