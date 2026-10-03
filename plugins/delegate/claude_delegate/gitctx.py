@@ -128,7 +128,15 @@ def hostile_context(cwd: Path, base: Optional[str]) -> HostileContext:
 def recheck_context(root: Path, base: str, original_revision: str) -> RecheckContext:
     _require_earlier(root, original_revision, "révision relue par le rapport d'origine", "/delegate:hostile-review")
     merge_base = _merge_base(root, base)
-    return _recheck(root, base, merge_base, original_revision, _freeze_working_tree(root), merge_base)
+    return _recheck(
+        root,
+        base=base,
+        target=base,
+        merge_base=merge_base,
+        original_revision=original_revision,
+        reviewed_revision=_freeze_working_tree(root),
+        trusted_revision=merge_base,
+    )
 
 
 def pull_request_recheck_context(root: Path, key: forge.PullRequestKey, original_revision: str) -> RecheckContext:
@@ -142,7 +150,16 @@ def pull_request_recheck_context(root: Path, key: forge.PullRequestKey, original
         f"ancienne tête de la {pr.label}",
         f"/delegate:pr-review {key.number} --forge {key.forge_name}",
     )
-    return _recheck(root, pr.base, fetched.merge_base, original_revision, pr.head, fetched.base_revision, pr)
+    return _recheck(
+        root,
+        base=pr.base,
+        target=fetched.base_revision,
+        merge_base=fetched.merge_base,
+        original_revision=original_revision,
+        reviewed_revision=pr.head,
+        trusted_revision=fetched.base_revision,
+        pull_request=pr,
+    )
 
 
 def pull_request_context(cwd: Path, number: int, forge_name: Optional[str] = None) -> PullRequestContext:
@@ -229,7 +246,9 @@ def _require_earlier(root: Path, revision: str, what: str, full_review: str) -> 
 
 def _recheck(
     root: Path,
+    *,
     base: str,
+    target: str,
     merge_base: str,
     original_revision: str,
     reviewed_revision: str,
@@ -237,10 +256,17 @@ def _recheck(
     pull_request: Optional[forge.PullRequest] = None,
 ) -> RecheckContext:
     """What a recheck reads from `original_revision` to `reviewed_revision`,
-    with the conventions of `trusted_revision`."""
+    for work on top of `target`, with the conventions of `trusted_revision`."""
     # Possibly empty: fixes may undo the whole change, findings still get ruled.
     diff = _diff(root, merge_base, reviewed_revision)
-    gap = _reviewable_diff(root, original_revision, reviewed_revision, "aucun changement depuis le rapport d'origine")
+    # Only the files the work touches, before or after the fixes: what a
+    # rebase or a merge brings from the target stays out.
+    original_base = _git_or_none(root, "merge-base", target, original_revision) or merge_base
+    touched = set(_changed_paths(root, original_base, original_revision))
+    touched |= set(_changed_paths(root, merge_base, reviewed_revision))
+    gap = _reviewable_diff(
+        root, original_revision, reviewed_revision, "aucun changement depuis le rapport d'origine", sorted(touched)
+    )
     _check_size(gap, diff)
     return RecheckContext(
         base=base,
@@ -272,20 +298,26 @@ def _commit(root: Path, revision: str) -> Optional[str]:
     return _git_or_none(root, "rev-parse", "--verify", "--quiet", f"{revision}^{{commit}}")
 
 
-def _diff(root: Path, start: str, end: str) -> str:
-    """The diff from `start` to `end` that the reviewer receives, without denied files."""
-    diff = git(root, "diff", "--no-color", "--no-ext-diff", start, end, "--", ".", *_DENIED, strip=False)
+def _diff(root: Path, start: str, end: str, paths: Optional[List[str]] = None) -> str:
+    """The diff from `start` to `end` that the reviewer receives, without denied
+    files, and limited to `paths` when given."""
+    if paths is not None and not paths:
+        return ""
+    pathspecs = ["."] if paths is None else [f":(literal){path}" for path in paths]
+    diff = git(root, "diff", "--no-color", "--no-ext-diff", start, end, "--", *pathspecs, *_DENIED, strip=False)
     if len(diff) > MAX_DIFF_CHARS:
         raise _too_large(len(diff))
     return diff
 
 
-def _reviewable_diff(root: Path, start: str, end: str, empty_reason: str) -> str:
-    """The diff from `start` to `end`, which must hold something to review:
-    `empty_reason` says why it does not."""
-    diff = _diff(root, start, end)
+def _reviewable_diff(
+    root: Path, start: str, end: str, empty_reason: str, paths: Optional[List[str]] = None
+) -> str:
+    """The diff from `start` to `end`, limited to `paths` when given, which must
+    hold something to review: `empty_reason` says why it does not."""
+    diff = _diff(root, start, end, paths)
     if not diff.strip():
-        unreviewed = _unreviewed_changes(root, start, end)
+        unreviewed = [name for name in _unreviewed_changes(root, start, end) if paths is None or name in paths]
         if unreviewed:
             raise DelegateError(
                 f"rien à relire : seuls changent des fichiers exclus de la revue ({', '.join(unreviewed)}), "
@@ -308,6 +340,12 @@ def _too_large(chars: int) -> DelegateError:
     return DelegateError(
         f"diff trop volumineux pour une revue : {size} caractères (maximum {limit})", EXIT_PREPARATION
     )
+
+
+def _changed_paths(root: Path, start: str, end: str) -> List[str]:
+    """The files changed from `start` to `end`, renamed ones under both names."""
+    names = git(root, "diff", "--name-only", "-z", "--no-renames", start, end, strip=False)
+    return [name for name in names.split("\0") if name]
 
 
 def _unreviewed_changes(root: Path, start: str, end: str) -> List[str]:

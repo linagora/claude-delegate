@@ -113,6 +113,18 @@ class PullRequestRecheckTest(PullRequestTestCase):
         self.assertIn("-    return a / b if b else PR_CHANGE", stdin)
         self.assertIn("+        raise ValueError(PR_FIX)", stdin)
 
+    def test_a_rebase_brings_nothing_from_the_target_branch_into_the_gap(self) -> None:
+        self.review()
+        self.move_target_branch({"amont.py": "UPSTREAM_ONLY = 1\n"})
+        self.update_pull_request({"app.py": FIXED})
+
+        result = self.run_recheck()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        stdin = self.sb.fake.last_call()["stdin"]
+        self.assertIn("+        raise ValueError(PR_FIX)", stdin)
+        self.assertNotIn("UPSTREAM_ONLY", stdin)
+
     def test_an_old_head_purged_after_a_force_push_asks_for_a_full_review(self) -> None:
         self.review()
         old_head = self.head

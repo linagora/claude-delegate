@@ -198,6 +198,22 @@ class RecheckTest(FeatureBranchTestCase):
 
         self.assert_refused([], "aucun changement depuis le rapport d'origine")
 
+    def test_a_rebase_brings_nothing_from_the_base_into_the_gap(self) -> None:
+        self.review()
+        self.sb.git("switch", "-q", "main")
+        self.sb.write("amont.py", "UPSTREAM_ONLY = 1\n")
+        self.sb.commit_all("main moves on")
+        self.sb.git("switch", "-q", "feature")
+        self.sb.git("rebase", "-q", "main")
+        self.sb.write("app.py", "def div(a, b):\n    return a / b if b else FIXED_AFTER_REBASE\n")
+
+        result = self.sb.run("recheck")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        stdin = self.sb.fake.last_call()["stdin"]
+        self.assertIn("+    return a / b if b else FIXED_AFTER_REBASE", stdin)
+        self.assertNotIn("UPSTREAM_ONLY", stdin)
+
     def test_fixes_that_undo_the_whole_change_are_still_ruled_on(self) -> None:
         self.review()
         self.sb.write("app.py", "def div(a, b):\n    return a / b\n")
