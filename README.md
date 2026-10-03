@@ -114,7 +114,9 @@ model. Nothing about the worker session's configuration leaks into it.
 
 Requirements: Claude Code (preferably the native binary, `~/.local/bin/claude`), git, Python 3.9 or later, a
 LINAGORA AI Gateway key for your worker sessions and a Claude subscription for the reviewer. To review pull
-requests you also need the GitHub CLI (`gh`) or, for GitLab merge requests, the GitLab CLI (`glab`).
+requests you also need the GitHub CLI (`gh`) or, for GitLab merge requests, the GitLab CLI (`glab`). On
+Linux, the launcher reads the gateway key from the keychain with `secret-tool` (Debian/Ubuntu package
+`libsecret-tools`).
 
 Every step is done from a terminal.
 
@@ -128,17 +130,22 @@ Every step is done from a terminal.
 
 2. **Install the `claude-deepseek` launcher**, which opens Claude Code on DeepSeek through the LINAGORA AI
    Gateway (`https://ai-api.linagora.com`, model `deepseek-v4.1-flash`). The marketplace cloned the
-   repository: a symlink is enough, and the launcher follows the marketplace updates. Then store your
-   gateway key in the keychain — the command asks for it:
+   repository: a symlink is enough, and the launcher follows the marketplace updates:
 
    ```bash
    ln -s ~/.claude/plugins/marketplaces/claude-delegate/bin/claude-deepseek ~/.local/bin/claude-deepseek
+   ```
+
+   Then store your gateway key in the system keychain. The command prompts you for the key:
+
+   ```bash
+   # Linux (Debian/Ubuntu: sudo apt install libsecret-tools)
+   secret-tool store --label="AI Gateway LINAGORA" service linagora-ai-api-key
+   # macOS
    security add-generic-password -a "$USER" -s linagora-ai-api-key -w
    ```
 
-   On Linux, store the key with `secret-tool store --label="AI Gateway LINAGORA" service
-   linagora-ai-api-key` (package `libsecret-tools`). On a server with no keychain, export it in
-   `LINAGORA_API_KEY` instead.
+   On a server with no keychain, export the key in `LINAGORA_API_KEY` instead.
 
    Then open your worker sessions with `claude-deepseek`. The launcher only sets its variables for the
    session it opens: your other sessions stay on Anthropic.
