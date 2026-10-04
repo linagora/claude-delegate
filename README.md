@@ -578,6 +578,12 @@ match none of them. A real run calls Anthropic and costs money, once per case an
 script flags as invented still has to be read, since it may be a real defect the case did not plant. The
 harness is not part of `unittest discover`: the suite stays offline and free.
 
+A defect whose fix has several parts carries `facets` in its `case.json` instead of `keywords`, and counts
+as found only when every part is named somewhere on its file, so a model that fixes half of a coupled
+change does not score it. Each case also carries a `trusted` block: the date its two revisions were read
+by a human and what that reading settled. The report prints that note beside the invented findings, and in
+its own table, so a reader knows which of them have already been ruled on.
+
 ## Linux acceptance run
 
 [`acceptance/linux.sh`](acceptance/linux.sh) replays the checklist of [#12](https://github.com/linagora/claude-delegate/issues/12),

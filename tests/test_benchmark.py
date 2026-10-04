@@ -58,6 +58,15 @@ class BenchmarkTest(unittest.TestCase):
         self.assertIn("1 constat(s) inventé(s)", done.stdout)
         self.assertIn("Constat qui ne correspond à aucun défaut planté", done.stdout)
 
+    def test_the_audit_of_a_case_is_printed_with_what_it_invented(self) -> None:
+        # An invented finding is only triageable against the reading of the
+        # case, so the note travels with it rather than sitting in the file.
+        done = self.dry_run("--models", "opus", "--cases", "divide")
+
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("Cas audité le 2026-10-04", done.stdout)
+        self.assertIn("| divide | 2026-10-04 |", done.stdout)
+
     def test_a_clean_case_scores_precision_alone(self) -> None:
         # No defect is planted, so any finding at all is invented: the fake
         # answers none, and the case must not look like a recall of zero.
@@ -97,6 +106,12 @@ class BenchmarkTest(unittest.TestCase):
                     self.assertIn(defect["file"], {str(path) for path in touched})
                     self.assertTrue(defect.get("keywords") or defect.get("facets"))
                     self.assertIn(defect["severity"], ("bloquant", "important", "mineur"))
+                # A case nobody has read is a case whose "invented" findings
+                # cannot be told from real defects. The audit is what makes a
+                # score mean something, so its absence fails the suite.
+                trusted = specification["trusted"]
+                self.assertTrue(trusted["audited_on"])
+                self.assertTrue(trusted["note"])
 
 
 class ScoringTest(unittest.TestCase):

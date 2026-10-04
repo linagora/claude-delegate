@@ -1,6 +1,10 @@
 {
   "title": "A pagination whose final partial page is short by one, and a walk that loses its size",
   "why": "The change carries two coupled defects, and a reviewer has to name both. The clamp reads as a guard and is off by one, so the last page loses its item, and an entirely short final page becomes empty. At the same time all_pages stops forwarding size to last_page_number, so the wrong number of pages is walked whenever the caller passes a size of their own. Fixing one alone leaves the other: correct the bound and the walk still enumerates the pages of the default size; correct the forwarding and the last page is empty. The case scores a recall only when both are named, which is what the earlier version could not do. An even earlier version was itself defective: it forced the return type to a list and evaluated the truthiness of the sequence, and all three models found those regressions for real.",
+  "trusted": {
+    "audited_on": "2026-10-04",
+    "note": "Both revisions read line by line. before/ walks every page correctly at any size; after/ plants exactly the two coupled defects, and nothing else differs. The pair was taken from a real review: recette #12 found that all_pages forwards size to page() but not to last_page_number(), and that the two fixes must ship together."
+  },
   "planted": [
     {
       "id": "lost-last-item",

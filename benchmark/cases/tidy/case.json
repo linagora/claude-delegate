@@ -1,5 +1,9 @@
 {
   "title": "A loop folded into one expression",
   "why": "The loop and the join were welded into a single generator: same lines, same order, same return. The case scores precision alone, like the other clean one, and it exists to show whether a model treats a tidy-up as an invitation to comment.",
+  "trusted": {
+    "audited_on": "2026-10-04",
+    "note": "Both revisions read line by line. The generator yields the rows in the order the list held them, the join is unchanged, and the docstring still holds; the only difference is that the intermediate list is gone. A finding here is a false positive by construction."
+  },
   "planted": []
 }

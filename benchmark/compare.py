@@ -21,6 +21,13 @@ finding on its file, each group is named — a model that fixes one part and
 misses the other has not found the defect, and the findings it did write stay
 counted as explained rather than invented.
 
+Each case carries a `trusted` block: the date its two revisions were read by a
+human, and what that reading settled. The audit exists because an "invented"
+finding is often a real defect the case did not plant, and only reading the
+case says which. The note is printed beside the invented findings, so a reader
+knows what has already been ruled on. It attests to a reading of the case, not
+to a model finding nothing: it is a floor, not a ceiling.
+
 This is a measurement, not a test: it is not run by `unittest discover`, and it
 is not offline unless `--dry-run` is used. A real run calls Anthropic and costs
 money, once per case and per model.
@@ -67,11 +74,20 @@ class Planted:
 
 
 @dataclass(frozen=True)
+class Trusted:
+    """A human reading of the two revisions: when, and what it settled."""
+
+    audited_on: str
+    note: str
+
+
+@dataclass(frozen=True)
 class Case:
     name: str
     directory: Path
     title: str
     why: str
+    trusted: Trusted
     planted: List[Planted]
 
     @property
@@ -115,6 +131,7 @@ def load_cases() -> List[Case]:
                 directory=directory,
                 title=specification["title"],
                 why=specification["why"],
+                trusted=Trusted(**specification["trusted"]),
                 planted=[Planted(**defect) for defect in specification["planted"]],
             )
         )
@@ -294,17 +311,32 @@ def summary(outcomes: List[Outcome]) -> str:
 def detail(outcomes: List[Outcome], cases: List[Case]) -> str:
     """What was invented, so that a human can rule on it. A keyword match is a
     hint, not a verdict: an invented finding may be a real defect the case did
-    not plant, and only reading it says which."""
-    lines = []
+    not plant, and only reading it says which, which is what the case's own
+    audit recorded, and it is printed with each group of findings."""
+    by_name = {case.name: case for case in cases}
+    lines: List[str] = []
     for outcome in outcomes:
         if outcome.failure or not outcome.invented:
             continue
-        case = next(case for case in cases if case.name == outcome.case)
-        lines += ["", f"### {outcome.model} sur {outcome.case} — {len(outcome.invented)} constat(s) inventé(s)"]
+        case = by_name[outcome.case]
+        lines += [
+            "",
+            f"### {outcome.model} sur {outcome.case} — {len(outcome.invented)} constat(s) inventé(s)",
+            f"Cas audité le {case.trusted.audited_on} : {case.trusted.note}",
+        ]
         for finding in outcome.invented:
             location = f"{finding.get('file')}:{finding.get('line')}"
             lines.append(f"- {location} ({finding.get('severity')}) : {finding.get('problem')}")
     return "\n".join(lines) + "\n" if lines else ""
+
+
+def audit(cases: List[Case]) -> str:
+    """Every case's audit, so a reader sees what has been ruled on even when a
+    run invents nothing."""
+    lines = ["", "| Cas | Audité le | Ce que la lecture a établi |", "|---|---|---|"]
+    for case in cases:
+        lines.append(f"| {case.name} | {case.trusted.audited_on} | {case.trusted.note} |")
+    return "\n".join(lines) + "\n"
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -326,7 +358,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     with tempfile.TemporaryDirectory(prefix="benchmark-state-") as state:
         outcomes = [review(case, model, Path(state), arguments.dry_run) for case in cases for model in arguments.models]
 
-    report = render(outcomes) + summary(outcomes) + detail(outcomes, cases)
+    report = render(outcomes) + summary(outcomes) + detail(outcomes, cases) + audit(cases)
     if arguments.dry_run:
         report = "Mesure à blanc : la plomberie seule, aucun appel au modèle.\n\n" + report
     sys.stdout.write(report)
