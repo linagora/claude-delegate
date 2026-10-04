@@ -53,7 +53,7 @@ Run them before opening a pull request.
 | `claude plugin validate --strict plugins/delegate` | Plugin manifest |
 
 - **Test what you change.** A new behaviour of the CLI belongs in a test that drives the real process, in a
-  temporary git repository, as the existing tests do — not in a unit test of an internal function.
+  temporary git repository, as the existing tests do, not in a unit test of an internal function.
 - **Run `/delegate:selftest`** after any change to the reviewer's permissions, environment or flags: it is
   the only check that exercises the real Claude Code isolation.
 
