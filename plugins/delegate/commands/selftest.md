@@ -1,6 +1,7 @@
 ---
-description: Vérifie sur le vrai Claude Code que le relecteur délégué reste isolé (Haiku, quelques centimes)
+description: Vérifie sur le vrai Claude Code que le relecteur délégué reste isolé (Haiku, quelques centimes). Sonde de diagnostic de l'isolation du relecteur, à lancer à la main.
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/bin/claude-delegate selftest:*)
+user-invocable: true
 disable-model-invocation: true
 ---
 

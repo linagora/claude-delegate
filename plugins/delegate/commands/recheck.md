@@ -1,8 +1,7 @@
 ---
-description: Re-revue après corrections, déléguée au relecteur de la revue d'origine dans une session isolée
+description: Re-revue après corrections, déléguée au relecteur de la revue d'origine dans une session isolée. À déclencher quand l'utilisateur dit avoir corrigé les constats d'une revue et demande de vérifier ce qui reste.
 argument-hint: "[identifiant ou chemin du rapport]"
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/bin/claude-delegate recheck:*)
-disable-model-invocation: true
 ---
 
 !`${CLAUDE_PLUGIN_ROOT}/bin/claude-delegate recheck $ARGUMENTS`

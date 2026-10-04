@@ -1,8 +1,14 @@
 """Static checks of the plugin's slash commands and manifests.
 
 A command whose `allowed-tools` does not cover its `!` invocation is silently
-aborted by Claude Code, and a command the model may invoke would let DeepSeek
-trigger a delegation on its own: both are checked here.
+aborted by Claude Code: that is checked here.
+
+A command the model may invoke lets the worker session trigger a delegation on
+its own, and spend Claude money without being asked. The four delegating
+commands are deliberately model-invocable, each with a `description` that says
+the natural-language request that triggers it, and the reviewer's shared prompt
+carries the budget that bounds them. `selftest` stays human-only: it is the
+isolation probe, and must remain a deliberate act.
 """
 
 from __future__ import annotations
@@ -55,17 +61,33 @@ class PluginCommandsTest(unittest.TestCase):
         self.assertEqual(manifest["name"], "delegate")
         self.assertEqual(manifest["version"], version)
 
-    def test_commands_are_human_only_and_allowed_exactly_their_invocations(self) -> None:
+    def test_commands_are_allowed_exactly_their_invocations(self) -> None:
         commands = sorted((PLUGIN / "commands").glob("*.md"))
         self.assertTrue(commands)
         for command in commands:
             with self.subTest(command.name):
                 fields, body = parse_command(command)
-                self.assertEqual(fields.get("disable-model-invocation"), "true")
                 self.assertEqual(
                     sorted(tool_rules(fields.get("allowed-tools", ""))),
                     sorted(rule_for(invocation) for invocation in shell_invocations(body)),
                 )
+
+    def test_commands_delegating_to_claude_are_model_invocable_and_selftest_is_not(self) -> None:
+        for command in sorted((PLUGIN / "commands").glob("*.md")):
+            fields, body = parse_command(command)
+            with self.subTest(command.name):
+                if command.name == "selftest.md":
+                    # The isolation probe: still triggered by the user alone.
+                    self.assertEqual(fields.get("disable-model-invocation"), "true")
+                    continue
+                # The natural-language request that triggers the delegation
+                # must be spelled out, or the model has nothing to match on.
+                self.assertNotIn("disable-model-invocation", fields)
+                self.assertIn("À déclencher quand", fields["description"])
+                if shell_invocations(body):
+                    # A review the model can trigger spends Opus money: the
+                    # reviewer is told when to stop.
+                    self.assertTrue(fields["description"].endswith("."))
 
     def test_invocations_target_the_executable_cli_and_one_of_its_subcommands(self) -> None:
         for command in sorted((PLUGIN / "commands").glob("*.md")):
@@ -110,6 +132,12 @@ class PluginCommandsTest(unittest.TestCase):
         # A recheck of a pull request is checked at its head, without a checkout.
         self.assertIn("git show", body)
         self.assertIn("« Fichiers non relus »", body)
+
+    def test_the_reviewer_budget_is_in_the_shared_security_fragment(self) -> None:
+        security = (PLUGIN / "prompts" / "security.md").read_text(encoding="utf-8")
+
+        self.assertIn("deux revues par tour", security)
+        self.assertIn("recheck", security)
 
     def test_handoff_writes_a_dated_brief_without_shell_and_points_to_a_spec_session(self) -> None:
         _, body = parse_command(PLUGIN / "commands" / "handoff.md")
