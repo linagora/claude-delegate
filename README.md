@@ -77,7 +77,8 @@ The v2 specification is tracked in issue #1.
 - **`claude-deepseek`.** A small launcher that opens a Claude Code session on DeepSeek through the LINAGORA
   AI Gateway (`https://ai-api.linagora.com`, model `deepseek-v4.1-flash`), pointing every model — main,
   Opus, Sonnet, Haiku and sub-agents — at the gateway model, and raising the `!` command timeout to 15
-  minutes.
+  minutes. It also bypasses the permission prompts, and forces the effort parameter through, which Claude
+  Code withholds from a model it does not know.
 
 ## Architecture
 
@@ -152,6 +153,13 @@ Every step is done from a terminal.
    - It points every model (main, Opus, Sonnet, Haiku and sub-agents) at the gateway model, because a gateway
      key reaches no other.
    - It raises the `!` command timeout to 15 minutes: an Opus review often exceeds the 2-minute default.
+   - It bypasses the permission prompts (`--dangerously-skip-permissions`), and asks for them again when
+     `CLAUDE_DEEPSEEK_ASK_PERMISSIONS=1` is exported. A prompt on a session without a frontier model is a
+     decision taken on the cheapest available judgement; bypassing it is deliberate, and worth revisiting on
+     a repository you do not trust.
+   - It sets `CLAUDE_CODE_ALWAYS_ENABLE_EFFORT`, without which `--effort` and `/effort` do nothing in these
+     sessions: Claude Code sends no effort parameter to a model it does not recognise, and a gateway model is
+     one of those.
    - Claude Code does not know this model: the cost it displays is wrong, only the gateway billing counts.
    - The claude.ai connectors (Gmail, Google Drive, etc.) are not available in these sessions.
    - To go through DeepSeek's own API, set `CLAUDE_DEEPSEEK_BASE_URL`, `CLAUDE_DEEPSEEK_MODEL` and
