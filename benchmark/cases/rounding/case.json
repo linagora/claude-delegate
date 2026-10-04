@@ -1,0 +1,14 @@
+{
+  "title": "A total that rounds each line before adding it up",
+  "why": "Rounding every line before summing accumulates a drift the old code did not have: three lines of 0.005 each add up to 2 cents here and to 1 cent before. The change reads as a tidy-up, moves the rounding where the eye expects it, and changes no single line's value, so a reviewer has to reason about the order of the two operations rather than spot a missing guard.",
+  "planted": [
+    {
+      "id": "rounded-before-summing",
+      "severity": "important",
+      "file": "invoice.py",
+      "line": 3,
+      "problem": "Each line is rounded before the sum, so the rounding error accumulates line by line instead of being applied once to the total",
+      "keywords": ["arrondi", "round", "dérive", "drift", "écart", "par ligne", "per line", "avant la somme", "before summing", "cumul", "accumul", "erreur"]
+    }
+  ]
+}

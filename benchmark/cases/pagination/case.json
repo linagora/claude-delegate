@@ -1,14 +1,14 @@
 {
-  "title": "A pagination that answers every page but the last chunk",
-  "why": "An off-by-one that only shows on the final page, where the requested size exceeds what is left. It reads as correct at a glance and is easy to invent findings about.",
+  "title": "A pagination whose final partial page is short by one",
+  "why": "The bound reads as a clamp and is off by one, so only the last, partial page loses an item and only when the page runs past the end. A reviewer has to reason about the boundary rather than pattern-match a guard. An earlier version of this case was itself defective: it forced the return type to a list and evaluated the truthiness of the sequence, and all three models found those regressions for real.",
   "planted": [
     {
-      "id": "lost-final-chunk",
+      "id": "lost-last-item",
       "severity": "important",
       "file": "paging.py",
-      "line": 8,
-      "problem": "When the requested page runs past the end, the remaining items are dropped instead of returned",
-      "keywords": ["partiel", "partial", "dernière page", "last page", "tronqu", "off-by-one", "short", "reste", "remain", "born", "min("]
+      "line": 7,
+      "problem": "The clamp subtracts one too many, so the final partial page drops its last item",
+      "keywords": ["dernier", "last", "off-by-one", "un de moins", "one short", "tronqu", "drop", "perdu", "len(items) - 1", "bound", "borne"]
     }
   ]
 }

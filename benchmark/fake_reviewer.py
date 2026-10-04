@@ -48,8 +48,39 @@ ANSWERS: Dict[str, List[Dict[str, Any]]] = {
             "fix": "Borner la fin à la longueur des éléments",
         }
     ],
-    # The clean case: the honest answer is no finding, and the fake gives none.
+    "rounding": [
+        {
+            "severity": "important",
+            "file": "invoice.py",
+            "line": 3,
+            "problem": "L'arrondi est appliqué à chaque ligne avant la somme, la dérive se cumule",
+            "failure_scenario": "Trois lignes à 0,005 donnent 2 centimes au lieu d'un",
+            "fix": "Sommer d'abord, arrondir une seule fois",
+        }
+    ],
+    "cache": [
+        {
+            "severity": "important",
+            "file": "pricing.py",
+            "line": 11,
+            "problem": "Le cache est écrit à chaque appel mais jamais lu, et rien ne l'invalide",
+            "failure_scenario": "set_rate ne rafraîchit aucun prix, le cache ne sert jamais",
+            "fix": "Relire le cache avant de calculer, ou le supprimer",
+        }
+    ],
+    "counter": [
+        {
+            "severity": "important",
+            "file": "usage.py",
+            "line": 11,
+            "problem": "Le verrou a disparu avec la réécriture, l'incrément n'est plus atomique",
+            "failure_scenario": "Deux threads qui ajoutent en même temps perdent un incrément",
+            "fix": "Garder un verrou autour de la mise à jour",
+        }
+    ],
+    # The clean cases: the honest answer is no finding, and the fake gives none.
     "clean": [],
+    "tidy": [],
 }
 
 #: Reads the case it is answering from the commit the CLI made, then prints a

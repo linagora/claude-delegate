@@ -27,22 +27,25 @@ class BenchmarkTest(unittest.TestCase):
         )
 
     def test_every_case_is_reviewed_by_every_model_and_scored(self) -> None:
-        done = self.dry_run("--models", "opus", "fable", "--cases", "divide", "pagination", "clean")
+        done = self.dry_run("--models", "opus", "fable")
 
         self.assertEqual(done.returncode, 0, done.stderr)
         for model in ("opus", "fable"):
-            for case in ("divide", "pagination", "clean"):
+            for case in ("divide", "pagination", "rounding", "cache", "counter", "clean", "tidy"):
                 self.assertIn(f"| {model} | {case} |", done.stdout, done.stdout)
 
     def test_a_planted_defect_the_answer_names_is_counted_as_found(self) -> None:
-        # The fake finds the zero division and the lost last chunk: the two
-        # planted defects are found, and nothing is reported as missed.
-        done = self.dry_run("--models", "opus", "--cases", "divide", "pagination")
+        # The fake finds every planted defect, and reports one finding on
+        # divide that matches none of them.
+        done = self.dry_run(
+            "--models", "opus",
+            "--cases", "divide", "pagination", "rounding", "cache", "counter",
+        )
 
         self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertIn("| opus | divide | 1/1 |", done.stdout)
-        self.assertIn("| opus | pagination | 1/1 |", done.stdout)
-        self.assertIn("| opus | 2 | 0 | 1 |", done.stdout)
+        for case in ("divide", "pagination", "rounding", "cache", "counter"):
+            self.assertIn(f"| opus | {case} | 1/1 |", done.stdout)
+        self.assertIn("| opus | 5 | 0 | 1 |", done.stdout)
 
     def test_a_finding_matching_no_planted_defect_is_reported_as_invented(self) -> None:
         done = self.dry_run("--models", "opus", "--cases", "divide")
@@ -54,10 +57,11 @@ class BenchmarkTest(unittest.TestCase):
     def test_a_clean_case_scores_precision_alone(self) -> None:
         # No defect is planted, so any finding at all is invented: the fake
         # answers none, and the case must not look like a recall of zero.
-        done = self.dry_run("--models", "opus", "--cases", "clean")
+        done = self.dry_run("--models", "opus", "--cases", "clean", "tidy")
 
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn("| opus | clean | 0/0 | 0 |", done.stdout)
+        self.assertIn("| opus | tidy | 0/0 | 0 |", done.stdout)
 
     def test_the_run_says_it_called_no_model(self) -> None:
         done = self.dry_run("--models", "opus", "--cases", "clean")
