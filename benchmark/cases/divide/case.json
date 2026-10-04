@@ -1,6 +1,10 @@
 {
   "title": "A division with no guard against a zero divisor",
   "why": "The classic defect: the happy path works, the caller passes 0, the process dies. A code reviewer must find it without being told where to look.",
+  "trusted": {
+    "audited_on": "2026-10-04",
+    "note": "Both revisions read line by line. after/ drops the zero guard in div and in mean, which is the one planted defect and the only behaviour change; the comment above div argues for the removal, so a reviewer is expected to rule against it rather than accept the reasoning."
+  },
   "planted": [
     {
       "id": "zero-division",

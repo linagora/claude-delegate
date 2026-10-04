@@ -15,6 +15,19 @@ A defect is judged found when a finding names its file and mentions one of its
 keywords. The keywords, not the wording, decide: two models phrase the same
 defect differently, so matching on an exact sentence would measure style.
 
+A defect whose fix has several parts carries `facets` instead of `keywords`:
+groups of keywords, one per part. It counts as found only when, across every
+finding on its file, each group is named — a model that fixes one part and
+misses the other has not found the defect, and the findings it did write stay
+counted as explained rather than invented.
+
+Each case carries a `trusted` block: the date its two revisions were read by a
+human, and what that reading settled. The audit exists because an "invented"
+finding is often a real defect the case did not plant, and only reading the
+case says which. The note is printed beside the invented findings, so a reader
+knows what has already been ruled on. It attests to a reading of the case, not
+to a model finding nothing: it is a floor, not a ceiling.
+
 This is a measurement, not a test: it is not run by `unittest discover`, and it
 is not offline unless `--dry-run` is used. A real run calls Anthropic and costs
 money, once per case and per model.
@@ -33,7 +46,7 @@ import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 ROOT = Path(__file__).resolve().parent.parent
 CLI = ROOT / "plugins" / "delegate" / "bin" / "claude-delegate"
@@ -48,12 +61,24 @@ GIT_IDENTITY = {
 
 @dataclass(frozen=True)
 class Planted:
+    """A defect a case plants. Either `keywords` (one part to name) or `facets`
+    (a group of keywords per part, all of them required) is given."""
+
     id: str
     severity: str
     file: str
     line: Optional[int]
     problem: str
-    keywords: List[str]
+    keywords: List[str] = field(default_factory=list)
+    facets: List[List[str]] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class Trusted:
+    """A human reading of the two revisions: when, and what it settled."""
+
+    audited_on: str
+    note: str
 
 
 @dataclass(frozen=True)
@@ -62,6 +87,7 @@ class Case:
     directory: Path
     title: str
     why: str
+    trusted: Trusted
     planted: List[Planted]
 
     @property
@@ -105,6 +131,7 @@ def load_cases() -> List[Case]:
                 directory=directory,
                 title=specification["title"],
                 why=specification["why"],
+                trusted=Trusted(**specification["trusted"]),
                 planted=[Planted(**defect) for defect in specification["planted"]],
             )
         )
@@ -193,31 +220,58 @@ def _report_path(stdout: str) -> Optional[Path]:
     return Path(first[len("Rapport : "):]) if first.startswith("Rapport : ") else None
 
 
-def score(outcome: Outcome, findings: Sequence[Any], case: Case) -> None:
-    """Split findings into the planted defects they name and the rest."""
-    matched: set = set()
-    for finding in findings:
-        defect = matching_defect(finding, case)
-        if defect is None:
-            outcome.invented.append(finding)
+def split(findings: Sequence[Any], planted: Sequence[Planted]) -> Tuple[List[str], List[str], List[Any]]:
+    """Which planted defects the findings name, which they missed, and which
+    findings name nothing: the whole scoring, as a pure function.
+
+    A finding is judged against the whole set, not one at a time, because a
+    defect whose fix has several parts may be named across several findings:
+    each part is looked for anywhere on the defect's file. A finding that names
+    a part is explained either way, so a model that fixes one part of a coupled
+    defect is credited with the finding it wrote and still misses the defect.
+    """
+    said = [
+        " ".join(
+            str(finding.get(field) or "") for field in ("problem", "failure_scenario", "fix")
+        ).lower()
+        for finding in findings
+    ]
+    explained: set = set()
+    found: set = set()
+    for defect in planted:
+        on_file = [i for i, finding in enumerate(findings) if finding.get("file") == defect.file]
+        if defect.facets:
+            # A part is named anywhere on the file, so two findings can cover
+            # one defect between them; the defect needs every part.
+            covered = [any(names(said[i], facet) for i in on_file) for facet in defect.facets]
+            for i in on_file:
+                if any(names(said[i], facet) for facet in defect.facets):
+                    explained.add(i)
+            if all(covered):
+                found.add(defect.id)
         else:
-            matched.add(defect.id)
-    outcome.found = [defect.id for defect in case.planted if defect.id in matched]
-    outcome.missed = [defect.id for defect in case.planted if defect.id not in matched]
+            for i in on_file:
+                if names(said[i], defect.keywords):
+                    explained.add(i)
+                    found.add(defect.id)
+                    break
+    return (
+        [defect.id for defect in planted if defect.id in found],
+        [defect.id for defect in planted if defect.id not in found],
+        [finding for i, finding in enumerate(findings) if i not in explained],
+    )
 
 
-def matching_defect(finding: Dict[str, Any], case: Case) -> Optional[Planted]:
-    """The planted defect a finding names, if any: same file, one keyword in the
-    text it wrote about it. Wording differs between models; keywords do not."""
-    said = " ".join(
-        str(finding.get(field) or "") for field in ("problem", "failure_scenario", "fix")
-    ).lower()
-    for defect in case.planted:
-        if defect.file != finding.get("file"):
-            continue
-        if any(keyword.lower() in said for keyword in defect.keywords):
-            return defect
-    return None
+def names(text: str, keywords: Sequence[str]) -> bool:
+    """Whether a finding's own words name one of a defect's keywords. The
+    keywords, not the wording, decide: two models phrase the same defect
+    differently, so matching on an exact sentence would measure style."""
+    return any(keyword.lower() in text for keyword in keywords)
+
+
+def score(outcome: Outcome, findings: Sequence[Any], case: Case) -> None:
+    """Record what the findings did with the planted defects."""
+    outcome.found, outcome.missed, outcome.invented = split(findings, case.planted)
 
 
 def render(outcomes: List[Outcome]) -> str:
@@ -257,17 +311,32 @@ def summary(outcomes: List[Outcome]) -> str:
 def detail(outcomes: List[Outcome], cases: List[Case]) -> str:
     """What was invented, so that a human can rule on it. A keyword match is a
     hint, not a verdict: an invented finding may be a real defect the case did
-    not plant, and only reading it says which."""
-    lines = []
+    not plant, and only reading it says which, which is what the case's own
+    audit recorded, and it is printed with each group of findings."""
+    by_name = {case.name: case for case in cases}
+    lines: List[str] = []
     for outcome in outcomes:
         if outcome.failure or not outcome.invented:
             continue
-        case = next(case for case in cases if case.name == outcome.case)
-        lines += ["", f"### {outcome.model} sur {outcome.case} — {len(outcome.invented)} constat(s) inventé(s)"]
+        case = by_name[outcome.case]
+        lines += [
+            "",
+            f"### {outcome.model} sur {outcome.case} — {len(outcome.invented)} constat(s) inventé(s)",
+            f"Cas audité le {case.trusted.audited_on} : {case.trusted.note}",
+        ]
         for finding in outcome.invented:
             location = f"{finding.get('file')}:{finding.get('line')}"
             lines.append(f"- {location} ({finding.get('severity')}) : {finding.get('problem')}")
     return "\n".join(lines) + "\n" if lines else ""
+
+
+def audit(cases: List[Case]) -> str:
+    """Every case's audit, so a reader sees what has been ruled on even when a
+    run invents nothing."""
+    lines = ["", "| Cas | Audité le | Ce que la lecture a établi |", "|---|---|---|"]
+    for case in cases:
+        lines.append(f"| {case.name} | {case.trusted.audited_on} | {case.trusted.note} |")
+    return "\n".join(lines) + "\n"
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -289,7 +358,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     with tempfile.TemporaryDirectory(prefix="benchmark-state-") as state:
         outcomes = [review(case, model, Path(state), arguments.dry_run) for case in cases for model in arguments.models]
 
-    report = render(outcomes) + summary(outcomes) + detail(outcomes, cases)
+    report = render(outcomes) + summary(outcomes) + detail(outcomes, cases) + audit(cases)
     if arguments.dry_run:
         report = "Mesure à blanc : la plomberie seule, aucun appel au modèle.\n\n" + report
     sys.stdout.write(report)

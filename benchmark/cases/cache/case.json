@@ -1,6 +1,10 @@
 {
   "title": "A cache that is written but never read",
   "why": "The guard is gone, so the cache no longer serves anything, and nothing invalidates it on a rate change either. The self-assignment in front of the return looks like an optimisation and is dead work on every call. It takes comparing the new body to the old one to see that the read was dropped, not just reordered.",
+  "trusted": {
+    "audited_on": "2026-10-04",
+    "note": "Both revisions read line by line. The only change is in price(): the membership read is gone and the write is unconditional. set_rate is untouched, and the stale-rate angle is part of the same defect rather than a second one, so one finding naming the dropped read covers it."
+  },
   "planted": [
     {
       "id": "cache-never-read",
