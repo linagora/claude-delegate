@@ -230,7 +230,8 @@ stopping in the middle leaves nothing half-done.
 
 ### Install by hand
 
-The steps below are the same work by hand.
+The same work, one command at a time. Read it to see what the installer did, or to redo a single step on a
+machine already set up.
 
 1. **Add the marketplace and install the plugin.**
 
