@@ -1,4 +1,4 @@
-"""The launcher of Claude Code on DeepSeek, run as a process with fakes of
+"""The launcher of a Claude Code worker session, run as a process with fakes of
 claude, security, secret-tool and uname first on the PATH."""
 
 from __future__ import annotations
@@ -15,7 +15,8 @@ from typing import Any, Dict, Optional
 
 from tests.support import ROOT
 
-LAUNCHER = ROOT / "bin" / "claude-deepseek"
+LAUNCHER = ROOT / "bin" / "claude-worker"
+COMPATIBILITY_LINK = ROOT / "bin" / "claude-deepseek"
 
 GATEWAY = "https://ai-api.linagora.com"
 GATEWAY_MODEL = "deepseek-v4.1-flash"
@@ -80,10 +81,15 @@ class LauncherTest(unittest.TestCase):
     def system(self, name: str) -> None:
         self.system_file.write_text(name + "\n", encoding="utf-8")
 
-    def launch(self, *args: str, env: Optional[Dict[str, str]] = None) -> subprocess.CompletedProcess[str]:
+    def launch(
+        self, *args: str, env: Optional[Dict[str, str]] = None, launcher: Optional[Path] = None
+    ) -> subprocess.CompletedProcess[str]:
         environment = {"PATH": f"{self.bin}{os.pathsep}/usr/bin{os.pathsep}/bin", "HOME": str(self.root)}
         return subprocess.run(
-            [str(LAUNCHER), *args], env={**environment, **(env or {})}, capture_output=True, text=True
+            [str(launcher or LAUNCHER), *args],
+            env={**environment, **(env or {})},
+            capture_output=True,
+            text=True,
         )
 
     def started(self, result: subprocess.CompletedProcess[str]) -> Dict[str, Any]:
@@ -125,7 +131,25 @@ class LauncherTest(unittest.TestCase):
 
         self.assertEqual(started["env"]["ANTHROPIC_AUTH_TOKEN"], "CLE_LINUX")
 
-    def test_deepseek_s_own_api_can_be_chosen_instead(self) -> None:
+    def test_another_anthropic_compatible_api_can_be_chosen_instead(self) -> None:
+        self.store({"deepseek-api-key": "CLE_DEEPSEEK"})
+
+        started = self.started(
+            self.launch(
+                env={
+                    "CLAUDE_WORKER_BASE_URL": "https://api.deepseek.com/anthropic",
+                    "CLAUDE_WORKER_MODEL": "deepseek-flash",
+                    "CLAUDE_WORKER_KEY_SERVICE": "deepseek-api-key",
+                }
+            )
+        )
+
+        env = started["env"]
+        self.assertEqual(env["ANTHROPIC_BASE_URL"], "https://api.deepseek.com/anthropic")
+        self.assertEqual(env["ANTHROPIC_AUTH_TOKEN"], "CLE_DEEPSEEK")
+        self.assertEqual({env[name] for name in MODEL_VARIABLES}, {"deepseek-flash"})
+
+    def test_the_old_variable_names_still_work_and_say_they_are_deprecated(self) -> None:
         self.store({"deepseek-api-key": "CLE_DEEPSEEK"})
 
         started = self.started(
@@ -143,6 +167,48 @@ class LauncherTest(unittest.TestCase):
         self.assertEqual(env["ANTHROPIC_AUTH_TOKEN"], "CLE_DEEPSEEK")
         self.assertEqual({env[name] for name in MODEL_VARIABLES}, {"deepseek-flash"})
 
+    def test_a_deprecated_variable_is_named_once_with_its_replacement(self) -> None:
+        result = self.launch(env={"CLAUDE_DEEPSEEK_MODEL": "deepseek-flash"})
+
+        self.started(result)
+        self.assertEqual(result.stderr.count("CLAUDE_DEEPSEEK_MODEL"), 1, result.stderr)
+        self.assertIn("CLAUDE_WORKER_MODEL", result.stderr)
+
+    def test_a_deprecated_variable_left_alone_says_nothing(self) -> None:
+        result = self.launch()
+
+        self.started(result)
+        self.assertNotIn("déprécié", result.stderr)
+
+    def test_the_new_name_wins_over_the_deprecated_one(self) -> None:
+        started = self.started(
+            self.launch(env={"CLAUDE_WORKER_MODEL": "nouveau-modele", "CLAUDE_DEEPSEEK_MODEL": "ancien-modele"})
+        )
+
+        self.assertEqual({started["env"][name] for name in MODEL_VARIABLES}, {"nouveau-modele"})
+
+    def test_a_new_name_and_a_deprecated_one_are_each_honoured_on_their_own(self) -> None:
+        # The model moves to the new name while the base URL stays on the old
+        # one, as after a partial migration: each keeps the value it names.
+        started = self.started(
+            self.launch(
+                env={
+                    "CLAUDE_WORKER_MODEL": "nouveau-modele",
+                    "CLAUDE_DEEPSEEK_BASE_URL": "https://ancien.exemple",
+                }
+            )
+        )
+
+        env = started["env"]
+        self.assertEqual(env["ANTHROPIC_BASE_URL"], "https://ancien.exemple")
+        self.assertEqual({env[name] for name in MODEL_VARIABLES}, {"nouveau-modele"})
+
+    def test_the_compatibility_link_runs_the_launcher(self) -> None:
+        started = self.started(self.launch("--resume", "abc", launcher=COMPATIBILITY_LINK))
+
+        self.assertEqual(started["env"]["ANTHROPIC_BASE_URL"], GATEWAY)
+        self.assertEqual(started["argv"], ["--dangerously-skip-permissions", "--resume", "abc"])
+
     def test_a_timeout_already_chosen_is_kept(self) -> None:
         started = self.started(self.launch(env={"BASH_DEFAULT_TIMEOUT_MS": "1200000"}))
 
@@ -157,9 +223,14 @@ class LauncherTest(unittest.TestCase):
 
     def test_permissions_are_bypassed_and_the_choice_can_be_reversed(self) -> None:
         bypassed = self.started(self.launch("--resume", "abc"))
-        asked = self.started(self.launch("--resume", "abc", env={"CLAUDE_DEEPSEEK_ASK_PERMISSIONS": "1"}))
+        asked = self.started(self.launch("--resume", "abc", env={"CLAUDE_WORKER_ASK_PERMISSIONS": "1"}))
 
         self.assertEqual(bypassed["argv"], ["--dangerously-skip-permissions", "--resume", "abc"])
+        self.assertEqual(asked["argv"], ["--resume", "abc"])
+
+    def test_the_old_permission_switch_still_reverses_the_choice(self) -> None:
+        asked = self.started(self.launch("--resume", "abc", env={"CLAUDE_DEEPSEEK_ASK_PERMISSIONS": "1"}))
+
         self.assertEqual(asked["argv"], ["--resume", "abc"])
 
     @unittest.skipUnless(shutil.which("shellcheck"), "shellcheck is not installed")

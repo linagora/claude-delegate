@@ -23,7 +23,7 @@ The project is a Claude Code plugin: the slash commands live in
 [`plugins/delegate/commands/`](plugins/delegate/commands), the prompts in
 [`plugins/delegate/prompts/`](plugins/delegate/prompts), and the CLI in
 [`plugins/delegate/claude_delegate/`](plugins/delegate/claude_delegate). The launcher is
-[`bin/claude-deepseek`](bin/claude-deepseek).
+[`bin/claude-worker`](bin/claude-worker).
 
 Requirements: Python 3.9 or later, git, and the [Claude Code](https://claude.com/claude-code) CLI (to run the
 plugin and validate its manifests). The CLI uses only the Python standard library: there is nothing to
