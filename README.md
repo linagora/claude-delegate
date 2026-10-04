@@ -13,7 +13,7 @@ slash command.**
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776ab.svg?logo=python&logoColor=white)](https://www.python.org)
 [![Languages: English, French](https://img.shields.io/badge/languages-English%20%7C%20French-c8102e.svg)](#contributing)
 
-[Overview](#overview) · [Features](#features) · [Architecture](#architecture) · [Getting started](#getting-started) · [Usage](#usage) · [Isolation](#isolation-of-the-delegated-session) · [Contributing](#contributing)
+[Overview](#overview) · [Features](#features) · [Architecture](#architecture) · [Getting started](#getting-started) · [Commands](#commands) · [Usage](#usage) · [Isolation](#isolation-of-the-delegated-session) · [Contributing](#contributing)
 
 </div>
 
@@ -191,6 +191,38 @@ Every step is done from a terminal.
    `--restricted`: if a check is not “OK”, do not use the delegation before you understand why.
 
 ## Usage
+
+### Commands
+
+Five slash commands are installed with the plugin. Each one is named after the plugin,
+`/delegate:<command>`.
+
+| Command | Argument | Delegated to | Triggered by | What it does |
+|---|---|---|---|---|
+| `/delegate:hostile-review` | `[base] [--model sonnet]` | Claude, Opus by default | You, or a review request | Hostile review of every change since the merge-base with the base |
+| `/delegate:pr-review` | `<number> [--forge github\|gitlab] [--model sonnet]` | Claude, Opus by default | You, or a review request | Review of a pull request or merge request, read on its forge |
+| `/delegate:recheck` | `[report]` | The model of the original review | You, or a fix-and-verify request | Ruling on each open finding of a report, then review of what changed since |
+| `/delegate:selftest` | — | Claude, Haiku | You only | Verifies that the reviewer's isolation still holds on a real delegated session |
+| `/delegate:handoff` | `<topic>` | Nothing: it stays in this session | You, or a handoff request | Writes a dated brief to prepare a specification session on Anthropic |
+
+The four delegating commands call the CLI in a `!` command and inject the report back into the session;
+their detailed behaviour, their exit codes and their edge cases are in the sections below. `/delegate:selftest`
+is the one to run once after installation, and again after every Claude Code update.
+
+#### Triggering a command without naming it
+
+A command marked *You, or a review request* also reaches the model, on its `description` alone: asking to
+have your changes reviewed, or a pull request reviewed before publishing it, starts the delegation without
+you typing `/delegate:…`. The match is probabilistic, so naming the command stays the deterministic way to
+get exactly the review you want.
+
+A review the model triggered spends Claude money without you asking for it, so it is bounded in the
+reviewer's own instructions: at most two per turn, only when the turn already concerns the reviewed code or
+carries the request, and never a second review of a subject already reviewed. That last rule is what points
+repeated work at `/delegate:recheck`, which rules on a report's open findings instead of reviewing afresh.
+
+`/delegate:selftest` is deliberately left out: it is the isolation probe, and its verdict should not depend
+on the model whose isolation it checks.
 
 ### Hostile review of your changes
 
