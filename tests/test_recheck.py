@@ -119,6 +119,21 @@ class RecheckTest(FeatureBranchTestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(option(self.sb.fake.last_call()["argv"], "--model"), "sonnet")
 
+    def test_a_report_of_any_reviewer_model_is_rechecked_with_that_same_model(self) -> None:
+        # The companion of a report names the model it asked for, and a recheck
+        # is read back through it: a model the reader no longer knows would make
+        # the report unreadable. Sonnet is the case above; Fable is the new one.
+        self.sb.fake.replies(
+            success(findings=ORIGINAL_FINDINGS),
+            recheck_result(F1="traité", F2="mal traité"),
+        )
+        report = self.review_then_fix("--model", "fable")
+
+        result = self.sb.run("recheck", str(report))
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(option(self.sb.fake.last_call()["argv"], "--model"), "fable")
+
     def test_a_report_designated_by_its_identifier_is_rechecked_rather_than_the_latest(self) -> None:
         self.sb.fake.replies(
             success(findings=ORIGINAL_FINDINGS),

@@ -318,8 +318,8 @@ Five slash commands are installed with the plugin. Each one is named after the p
 
 | Command | Argument | Delegated to | Triggered by | What it does |
 |---|---|---|---|---|
-| `/delegate:hostile-review` | `[base] [--model sonnet]` | Claude, Opus by default | You, or a review request | Hostile review of every change since the merge-base with the base |
-| `/delegate:pr-review` | `<number> [--forge github\|gitlab] [--model sonnet]` | Claude, Opus by default | You, or a review request | Review of a pull request or merge request, read on its forge |
+| `/delegate:hostile-review` | `[base] [--model sonnet\|fable]` | Claude, Opus by default | You, or a review request | Hostile review of every change since the merge-base with the base |
+| `/delegate:pr-review` | `<number> [--forge github\|gitlab] [--model sonnet\|fable]` | Claude, Opus by default | You, or a review request | Review of a pull request or merge request, read on its forge |
 | `/delegate:recheck` | `[report]` | The model of the original review | You, or a fix-and-verify request | Ruling on each open finding of a report, then review of what changed since |
 | `/delegate:selftest` | — | Claude, Haiku | You only | Verifies that the reviewer's isolation still holds on a real delegated session |
 | `/delegate:handoff` | `<topic>` | Nothing: it stays in this session | You, or a handoff request | Writes a dated brief to prepare a specification session on Anthropic |
@@ -346,7 +346,7 @@ on the model whose isolation it checks.
 ### Hostile review of your changes
 
 ```
-/delegate:hostile-review [base] [--model sonnet]
+/delegate:hostile-review [base] [--model sonnet|fable]
 ```
 
 The command reviews every change since the merge-base with the base: committed, staged and unstaged, plus
@@ -379,7 +379,9 @@ Import rules:
 
 If git cannot read the conventions, the review stops with exit code 3.
 
-The reviewer is Opus by default. `--model sonnet` replaces it with Sonnet, and no other model is accepted.
+The reviewer is Opus by default. `--model sonnet` or `--model fable` replaces it, and no other model is accepted.
+These are Claude Code's own aliases, each naming the latest model of its family: a release that moves an alias
+behind the scenes moves the review with it.
 
 The report header states how the review ran:
 
@@ -392,7 +394,7 @@ The report header states how the review ran:
 ### Review a pull request or merge request
 
 ```
-/delegate:pr-review <number> [--forge github|gitlab] [--model sonnet]
+/delegate:pr-review <number> [--forge github|gitlab] [--model sonnet|fable]
 ```
 
 The command reviews a GitHub pull request or GitLab merge request on its own code, not on your local branch.

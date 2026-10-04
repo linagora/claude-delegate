@@ -1,6 +1,6 @@
 ---
 description: Revue hostile des changements en cours, déléguée à Claude (Opus par défaut) dans une session isolée. À déclencher quand l'utilisateur demande de relire, critiquer ou challenger les changements en cours avant de les publier.
-argument-hint: "[branche de base] [--model sonnet]"
+argument-hint: "[branche de base] [--model sonnet|fable]"
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/bin/claude-delegate hostile-review:*)
 ---
 

@@ -7,6 +7,9 @@ import unittest
 
 from tests.support import PLUGIN, SAMPLE_FINDING, FeatureBranchTestCase, option, report_path, success
 
+#: The aliases `--model` accepts, as the command's own help spells them out.
+REVIEWER_MODELS = ("opus", "sonnet", "fable")
+
 
 def section(report: str, title: str) -> str:
     """The body of a `## title` section of a Markdown report."""
@@ -250,13 +253,17 @@ class HostileReviewTest(FeatureBranchTestCase):
         companion = json.loads(report_path(result.stdout).with_suffix(".json").read_text(encoding="utf-8"))
         self.assertEqual(len(companion["permission_denials"]), 16)
 
-    def test_sonnet_can_be_requested_and_other_models_are_refused(self) -> None:
-        self.sb.run("hostile-review", "main", "--model", "sonnet")
+    def test_every_reviewer_model_can_be_requested_and_the_others_are_refused(self) -> None:
+        for model in REVIEWER_MODELS:
+            with self.subTest(model=model):
+                reviewed = self.sb.run("hostile-review", "main", "--model", model)
+                self.assertEqual(reviewed.returncode, 0, reviewed.stderr)
+                self.assertEqual(option(self.sb.fake.last_call()["argv"], "--model"), model)
 
-        self.assertEqual(option(self.sb.fake.last_call()["argv"], "--model"), "sonnet")
+        before = len(self.sb.fake.calls())
         refused = self.sb.run("hostile-review", "main", "--model", "haiku")
         self.assertEqual(refused.returncode, 2)
-        self.assertEqual(len(self.sb.fake.calls()), 1)
+        self.assertEqual(len(self.sb.fake.calls()), before)
 
     def test_reports_are_filed_under_the_origin_repository_without_credentials(self) -> None:
         expected = self.sb.state / "claude-delegate" / "github.com" / "linagora" / "claude-delegate"
