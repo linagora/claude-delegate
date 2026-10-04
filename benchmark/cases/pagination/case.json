@@ -1,0 +1,14 @@
+{
+  "title": "A pagination that answers every page but the last chunk",
+  "why": "An off-by-one that only shows on the final page, where the requested size exceeds what is left. It reads as correct at a glance and is easy to invent findings about.",
+  "planted": [
+    {
+      "id": "lost-final-chunk",
+      "severity": "important",
+      "file": "paging.py",
+      "line": 8,
+      "problem": "When the requested page runs past the end, the remaining items are dropped instead of returned",
+      "keywords": ["partiel", "partial", "dernière page", "last page", "tronqu", "off-by-one", "short", "reste", "remain", "born", "min("]
+    }
+  ]
+}

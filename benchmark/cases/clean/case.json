@@ -1,0 +1,5 @@
+{
+  "title": "A pure refactor that changes no behaviour",
+  "why": "The two revisions are equivalent, so a reviewer that invents findings here costs more in triage than it saves. This case scores precision alone: any finding is a false positive. It was rewritten once already, because the first version changed how non-ASCII and underscores were handled, and Fable found those regressions for real.",
+  "planted": []
+}

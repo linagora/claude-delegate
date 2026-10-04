@@ -1,0 +1,14 @@
+{
+  "title": "A division with no guard against a zero divisor",
+  "why": "The classic defect: the happy path works, the caller passes 0, the process dies. A code reviewer must find it without being told where to look.",
+  "planted": [
+    {
+      "id": "zero-division",
+      "severity": "bloquant",
+      "file": "totals.py",
+      "line": 14,
+      "problem": "div is called with a divisor that may be zero, and the division is not guarded",
+      "keywords": ["zéro", "zero", "division", "divid", "guard", "garde", "denominator", "diviseur"]
+    }
+  ]
+}
