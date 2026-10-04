@@ -1,11 +1,11 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
-@dataclass
+@dataclass(eq=False)
 class Usage:
     """A counter that several threads increment."""
 
-    total: float = field(default=0.0)
+    total: int = 0
 
     def add(self, cost):
         self.total += cost

@@ -1,6 +1,6 @@
 {
   "title": "A lock traded for a dataclass",
-  "why": "The class was rewritten as a dataclass and the lock went with the rewrite, while the lock is what made the counter safe for the threads the docstring still mentions. Nothing in the new lines is wrong on its own, so the defect is only visible against what the previous revision guaranteed.",
+  "why": "The class was rewritten as a dataclass and the lock went with the rewrite, while the lock is what made the counter safe for the threads the docstring still mentions. Nothing in the new lines is wrong on its own, so the defect is only visible against what the previous revision guaranteed. Two earlier versions of this case carried regressions the case did not intend: the total widened from an int to a float, then the generated `__eq__` made the object unhashable. All three models found the first, and Fable the second, so the type stays an int and `eq=False` keeps equality identity-based, leaving the lock as the only defect.",
   "planted": [
     {
       "id": "lock-removed",
