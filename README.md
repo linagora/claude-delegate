@@ -2,8 +2,8 @@
 
 # claude-delegate
 
-**Delegate the code reviews of a Claude Code session running on DeepSeek to Claude — Opus by
-default, Sonnet on demand — inside an isolated, read-only session, triggered deterministically by a
+**Delegate the code reviews of a Claude Code session running on DeepSeek to Claude (Opus by
+default, Sonnet on demand) inside an isolated, read-only session, triggered deterministically by a
 slash command.**
 
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
@@ -28,7 +28,7 @@ their code reviewed by a frontier model. The worker session stays on DeepSeek; t
 
 The reviewer is never reached by accident: a slash command runs a deterministic CLI, which prepares the
 revision to review, spawns the delegated session with a locked-down tool set and a rebuilt environment, and
-archives a structured report. The DeepSeek session then verifies and triages each finding — nothing is
+archives a structured report. The DeepSeek session then verifies and triages each finding: nothing is
 changed or published without your approval.
 
 The plugin also carries the hand-off to a specification session: specs are not delegated, they are written
@@ -41,7 +41,7 @@ The v2 specification is tracked in issue #1.
 ### Review
 
 - **Hostile review of your working changes.** `/delegate:hostile-review` reviews everything since the
-  merge-base with a base branch — committed, staged and unstaged changes, plus untracked files that git does
+  merge-base with a base branch: committed, staged and unstaged changes, plus untracked files that git does
   not ignore. The reviewed state is frozen in an unreferenced technical commit, without touching your index,
   and its identifier appears in the report.
 - **Pull-request and merge-request review.** `/delegate:pr-review` reviews a GitHub pull request or a GitLab
@@ -49,7 +49,7 @@ The v2 specification is tracked in issue #1.
   is fetched without moving any of your refs, and the review runs in a throwaway detached worktree created
   outside the repository.
 - **Re-review after fixes.** `/delegate:recheck` has the reviewer rule on every Blocking or Important
-  finding of a previous report — addressed, not addressed or poorly addressed — and also looks for
+  finding of a previous report (addressed, not addressed or poorly addressed), and also looks for
   regressions introduced by the fixes.
 - **Project conventions, from a trusted revision.** The reviewer receives the root `CLAUDE.md` as it is at
   the merge-base (or the base branch, for a pull request), with its `@path` imports resolved in the same
@@ -75,8 +75,8 @@ The v2 specification is tracked in issue #1.
 ### Launcher
 
 - **`claude-worker`.** A small launcher that opens a Claude Code worker session on a non-Anthropic model
-  through the LINAGORA AI Gateway (`https://ai-api.linagora.com`, model `deepseek-v4.1-flash`), pointing every model — main,
-  Opus, Sonnet, Haiku and sub-agents — at the gateway model, and raising the `!` command timeout to 15
+  through the LINAGORA AI Gateway (`https://ai-api.linagora.com`, model `deepseek-v4.1-flash`), pointing every model (main,
+  Opus, Sonnet, Haiku and sub-agents) at the gateway model, and raising the `!` command timeout to 15
   minutes. It also bypasses the permission prompts, and forces the effort parameter through, which Claude
   Code withholds from a model it does not know.
 
@@ -321,7 +321,7 @@ Five slash commands are installed with the plugin. Each one is named after the p
 | `/delegate:hostile-review` | `[base] [--model sonnet\|fable]` | Claude, Opus by default | You, or a review request | Hostile review of every change since the merge-base with the base |
 | `/delegate:pr-review` | `<number> [--forge github\|gitlab] [--model sonnet\|fable]` | Claude, Opus by default | You, or a review request | Review of a pull request or merge request, read on its forge |
 | `/delegate:recheck` | `[report]` | The model of the original review | You, or a fix-and-verify request | Ruling on each open finding of a report, then review of what changed since |
-| `/delegate:selftest` | — | Claude, Haiku | You only | Verifies that the reviewer's isolation still holds on a real delegated session |
+| `/delegate:selftest` | none | Claude, Haiku | You only | Verifies that the reviewer's isolation still holds on a real delegated session |
 | `/delegate:handoff` | `<topic>` | Nothing: it stays in this session | You, or a handoff request | Writes a dated brief to prepare a specification session on Anthropic |
 
 The four delegating commands call the CLI in a `!` command and inject the report back into the session;
@@ -452,8 +452,8 @@ that changed since the revision reviewed by that report, to spot regressions int
 
 - With no argument, the re-review targets the repository's latest report. Otherwise, name a report by its
   identifier, or by the path of its Markdown or JSON file.
-- A re-review can itself be re-reviewed: the next one rules on what it left open — the findings not
-  addressed or poorly addressed, with their latest status — and on its new blocking or important findings.
+- A re-review can itself be re-reviewed: the next one rules on what it left open (the findings not
+  addressed or poorly addressed, with their latest status) and on its new blocking or important findings.
   You can thus chain fixes and re-reviews.
 - The reviewer receives the findings to rule on, the delta since the revision reviewed by the original
   report and the current full diff. The current state is frozen as for a hostile review, untracked files

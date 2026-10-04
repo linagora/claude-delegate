@@ -56,7 +56,7 @@ leaders responsible for enforcement.
      conduct@linagora.com) once one exists. -->
 
 Until a dedicated address is published, report to the project maintainers through a private channel: open
-the repository's **Security** tab and choose **Report a vulnerability** — it reaches the maintainers only,
+the repository's **Security** tab and choose **Report a vulnerability**: it reaches the maintainers only,
 and is the same private channel used for security reports (see [SECURITY.md](SECURITY.md)). If your report
 is not a vulnerability, say so in the first line, so it is routed correctly.
 

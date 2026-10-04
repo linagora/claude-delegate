@@ -39,7 +39,7 @@ Never include a real API key, a Claude credential or personal data in a report: 
 
 The core promise of this project is the isolation of the delegated reviewer: it must not be able to read
 outside the reviewed code or a `.env`, write, run a shell, or be driven by the configuration of the
-repository under review — its hooks, MCP servers or `CLAUDE.md`. A bypass of any of these guarantees is the
+repository under review (its hooks, MCP servers or `CLAUDE.md`). A bypass of any of these guarantees is the
 most serious kind of finding for this project, and the `/delegate:selftest` command exists to detect it. If
 you find one, report it privately.
 
@@ -62,7 +62,7 @@ Other surfaces worth your attention:
 
 ## Scope
 
-In scope: the code and configuration of this repository — the plugin's commands and prompts, the
+In scope: the code and configuration of this repository: the plugin's commands and prompts, the
 `claude-delegate` CLI and the isolation it enforces, the launcher, and the report handling.
 
 Out of scope:
