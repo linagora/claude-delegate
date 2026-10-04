@@ -1,0 +1,14 @@
+{
+  "title": "A pagination whose final partial page is short by one",
+  "why": "The bound reads as a clamp and is off by one, so only the last, partial page loses an item and only when the page runs past the end. A reviewer has to reason about the boundary rather than pattern-match a guard. An earlier version of this case was itself defective: it forced the return type to a list and evaluated the truthiness of the sequence, and all three models found those regressions for real.",
+  "planted": [
+    {
+      "id": "lost-last-item",
+      "severity": "important",
+      "file": "paging.py",
+      "line": 7,
+      "problem": "The clamp subtracts one too many, so the final partial page drops its last item",
+      "keywords": ["dernier", "last", "off-by-one", "un de moins", "one short", "tronqu", "drop", "perdu", "len(items) - 1", "bound", "borne"]
+    }
+  ]
+}

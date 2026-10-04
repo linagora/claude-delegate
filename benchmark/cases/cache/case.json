@@ -1,0 +1,14 @@
+{
+  "title": "A cache that is written but never read",
+  "why": "The guard is gone, so the cache no longer serves anything, and nothing invalidates it on a rate change either. The self-assignment in front of the return looks like an optimisation and is dead work on every call. It takes comparing the new body to the old one to see that the read was dropped, not just reordered.",
+  "planted": [
+    {
+      "id": "cache-never-read",
+      "severity": "important",
+      "file": "pricing.py",
+      "line": 11,
+      "problem": "The cache is assigned on every call but never read, so it stores a value that is recomputed anyway and never serves a hit",
+      "keywords": ["cache", "mémo", "jamais lu", "never read", "n'est pas lu", "inutile", "dead", "mort", "caché", "toujours recalcul", "recalcul", "recompute", "invalidation", "invalid"]
+    }
+  ]
+}

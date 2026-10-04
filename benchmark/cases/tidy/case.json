@@ -1,0 +1,5 @@
+{
+  "title": "A loop folded into one expression",
+  "why": "The loop and the join were welded into a single generator: same lines, same order, same return. The case scores precision alone, like the other clean one, and it exists to show whether a model treats a tidy-up as an invitation to comment.",
+  "planted": []
+}
