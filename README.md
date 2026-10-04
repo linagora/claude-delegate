@@ -117,23 +117,121 @@ Requirements: Claude Code (preferably the native binary, `~/.local/bin/claude`),
 LINAGORA AI Gateway key for your worker sessions and a Claude subscription for the reviewer. To review pull
 requests you also need the GitHub CLI (`gh`) or, for GitLab merge requests, the GitLab CLI (`glab`). On
 Linux, the launcher reads the gateway key from the keychain with `secret-tool` (Debian/Ubuntu package
-`libsecret-tools`).
+`libsecret-tools`), which the installer installs nothing for.
 
-The short path is one command, on a fresh machine:
+There are two ways in. The installer does everything in one command and is the recommended one; the manual
+steps after it do the same work by hand, and are there to understand what the installer did or to redo one
+step on a machine already set up.
+
+### Install with the installer
+
+One command, on any machine:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/linagora/claude-delegate/main/install.sh | bash
 ```
 
-It installs Claude Code only if it is missing, adds the marketplace and the plugin, links the
-`claude-worker` launcher into `~/.local/bin`, asks you for a provider and a key, and checks that the worker
-session answers. The key goes to the system keychain when there is one; otherwise it is written, with the
-rest of the configuration, to `~/.config/claude-worker/config` (mode `0600`, plain `NAME=value` lines the
-launcher parses, so never `source` it). It never signs in to Anthropic for you: that step stays yours, and it
-says what to do. Run `install.sh --uninstall` to remove the configuration, the keychain entry and the links.
+Piping into `bash` puts the script itself on stdin, so the installer reads its answers from `/dev/tty`: run
+it from a terminal and it asks its questions there, as if you had downloaded the file. On a machine with no
+terminal at all (cloud-init, a bootstrap script), it asks nothing, uses the defaults and the `CLAUDE_WORKER_*`
+variables, and stops with a clear message if the key is missing.
 
-The steps below are the same work by hand. Read them to understand what the installer did, or to redo one of
-them.
+What it does, and what it never does:
+
+- installs Claude Code **only if it is missing**, and never updates it;
+- adds the marketplace and installs the plugin `delegate@claude-delegate`, or says it is already there;
+- links `claude-worker` into `~/.local/bin` (and `claude-deepseek`, the compatibility name), fetching the
+  launcher to `~/.local/share/claude-worker` when the script has no file beside it;
+- asks for the provider and for the key, checks that the worker session answers, and writes the
+  configuration;
+- **never** signs in to Anthropic, never updates Claude Code, never edits `.bashrc`, `.zshrc` or `.profile`.
+
+#### Follow it step by step
+
+The installer is re-runnable: each step looks at the state before acting, so running it twice is safe, and
+stopping in the middle leaves nothing half-done.
+
+1. **Run it.** From a terminal, on the machine itself:
+
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/linagora/claude-delegate/main/install.sh | bash
+   ```
+
+   If you prefer to read the script before running it, which is always reasonable for a `curl | bash`:
+
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/linagora/claude-delegate/main/install.sh -o install.sh
+   less install.sh
+   bash install.sh
+   ```
+
+2. **Answer the questions.** It shows the banner, prints what it installs, then asks in order:
+
+   - **Which provider serves your worker model?** `1` is LINAGORA, the shortest path internally. The list
+     also offers DeepSeek, Z.ai, Moonshot, MiniMax, OpenRouter, and a free-text entry for your own
+     Anthropic-compatible endpoint, including an internal LiteLLM proxy.
+   - **The base URL**, when the provider has none or you chose the free-text entry. A URL ending in `/v1`
+     is corrected, since Claude Code appends `/v1/messages` itself.
+   - **Does your API key reach one model or several?** Answer `one` when your key is restricted to a single
+     model: no model is then asked for, and the provider's default is recorded. Answer `several` (the
+     default) to be asked for the model. Either way a model is written down, because Claude Code always
+     sends a model name and a restricted key refuses the names it would otherwise send.
+   - **The API key.** Typed without being echoed.
+
+   To skip the questions, export `CLAUDE_WORKER_PROVIDER`, `CLAUDE_WORKER_BASE_URL`, `CLAUDE_WORKER_MODEL`
+   and `CLAUDE_WORKER_API_KEY` before running it.
+
+3. **Read the end of the output.** It repeats the provider, the base URL and the model that were kept, so
+   you can catch a wrong value before closing, then says where the key went. Success looks like:
+
+   ```
+   The worker session can reach https://ai-api.linagora.com.
+   The key is in the system keychain, under "linagora-ai-api-key".
+   Configuration written to /home/you/.config/claude-worker/config.
+   ```
+
+   If no keychain is available (a server without `secret-tool`), it says so and puts the key in the file
+   instead, at mode `0600`. The file holds plain `NAME=value` lines that the launcher parses; it is not
+   shell-escaped, so **never** `source` it.
+
+4. **Add `~/.local/bin` to your `PATH` if the installer says so.** It prints the exact line and changes
+   nothing for you:
+
+   ```bash
+   export PATH="${HOME}/.local/bin:${PATH}"
+   ```
+
+   Put it in your shell profile yourself, once, if you want it to survive a new shell.
+
+5. **Finish the reviewer.** The installer never signs in to Anthropic; it only reports the state of
+   `~/.claude-anthropic` and tells you what to do. Follow step 3 of the manual path below.
+
+6. **Check it, in this order.**
+
+   ```bash
+   claude-worker --version          # the launcher runs, so the link and the PATH are right
+   grep -c ANTHROPIC ~/.config/claude-worker/config   # the file the launcher reads is there
+   claude-worker                    # then, inside the session: /status
+   ```
+
+   The `/status` of a worker session must show `https://ai-api.linagora.com` (or your provider's URL),
+   `ANTHROPIC_AUTH_TOKEN` set, and the `deepseek-v4.1-flash` model. Then run `/delegate:selftest` in that
+   same session: eight checks, all “OK”.
+
+7. **To start over**, or to remove everything this installer added:
+
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/linagora/claude-delegate/main/install.sh | bash -s -- --uninstall
+   ```
+
+   It removes the configuration, the keychain entry it stored and the two links, and prints the one command
+   that removes the plugin. It never touches Claude Code. A link you created yourself under the same name is
+   left alone.
+
+### Install by hand
+
+The same work, one command at a time. Read it to see what the installer did, or to redo a single step on a
+machine already set up.
 
 1. **Add the marketplace and install the plugin.**
 
@@ -162,10 +260,11 @@ them.
    security add-generic-password -a "$USER" -s linagora-ai-api-key -w
    ```
 
-   On a server with no keychain, export the key in `LINAGORA_API_KEY` instead. The installer takes a third
-   path: it writes `CLAUDE_WORKER_API_KEY` into `~/.config/claude-worker/config`, which the launcher reads
-   before the keychain. For each setting the launcher tries the environment variable first, then that file,
-   then its own default.
+   On a server with no keychain, export the key in `LINAGORA_API_KEY` instead. The installer does the same
+   thing you just did: it stores the key in the system keychain when there is one, and only writes it to
+   `${XDG_CONFIG_HOME:-~/.config}/claude-worker/config` (mode `0600`) when there is none. For each setting
+   the launcher tries the environment variable first, then that file, then the keychain, then its own
+   default.
 
    Then open your worker sessions with `claude-worker`. The launcher only sets its variables for the
    session it opens: your other sessions stay on Anthropic.
