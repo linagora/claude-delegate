@@ -46,7 +46,15 @@ ANSWERS: Dict[str, List[Dict[str, Any]]] = {
             "problem": "Le reste de la dernière page est perdu",
             "failure_scenario": "page(items, dernier, size) tronque le dernier lot",
             "fix": "Borner la fin à la longueur des éléments",
-        }
+        },
+        {
+            "severity": "important",
+            "file": "paging.py",
+            "line": 16,
+            "problem": "all_pages ne transmet plus le paramètre size à last_page_number",
+            "failure_scenario": "Un appelant avec sa propre taille obtient la pagination de la taille par défaut",
+            "fix": "Transmettre size aux deux appels, pas seulement à page",
+        },
     ],
     "rounding": [
         {

@@ -12,6 +12,9 @@ from pathlib import Path
 
 from tests.support import ROOT
 
+sys.path.insert(0, str(ROOT))
+from benchmark.compare import Planted, split  # noqa: E402
+
 BENCHMARK = ROOT / "benchmark" / "compare.py"
 CASES = ROOT / "benchmark" / "cases"
 
@@ -43,9 +46,10 @@ class BenchmarkTest(unittest.TestCase):
         )
 
         self.assertEqual(done.returncode, 0, done.stderr)
-        for case in ("divide", "pagination", "rounding", "cache", "counter"):
+        for case in ("divide", "rounding", "cache", "counter"):
             self.assertIn(f"| opus | {case} | 1/1 |", done.stdout)
-        self.assertIn("| opus | 5 | 0 | 1 |", done.stdout)
+        self.assertIn("| opus | pagination | 2/2 |", done.stdout)
+        self.assertIn("| opus | 6 | 0 | 1 |", done.stdout)
 
     def test_a_finding_matching_no_planted_defect_is_reported_as_invented(self) -> None:
         done = self.dry_run("--models", "opus", "--cases", "divide")
@@ -91,8 +95,68 @@ class BenchmarkTest(unittest.TestCase):
                 }
                 for defect in specification["planted"]:
                     self.assertIn(defect["file"], {str(path) for path in touched})
-                    self.assertTrue(defect["keywords"])
+                    self.assertTrue(defect.get("keywords") or defect.get("facets"))
                     self.assertIn(defect["severity"], ("bloquant", "important", "mineur"))
+
+
+class ScoringTest(unittest.TestCase):
+    """The split between planted defects and invented findings, as a pure
+    function: coupled defects are the part worth pinning down."""
+
+    PLANTED = [
+        Planted(
+            id="coupled",
+            severity="important",
+            file="paging.py",
+            line=16,
+            problem="Two parts",
+            facets=[["size", "taille"], ["last_page_number", "borne"]],
+        )
+    ]
+
+    def finding(self, text: str, file: str = "paging.py") -> dict:
+        return {"file": file, "line": 16, "problem": text, "failure_scenario": "", "fix": ""}
+
+    def test_both_parts_across_two_findings_are_found(self) -> None:
+        found, missed, invented = split(
+            [
+                self.finding("Le paramètre size n'est plus transmis"),
+                self.finding("last_page_number est faux"),
+            ],
+            self.PLANTED,
+        )
+
+        self.assertEqual(found, ["coupled"])
+        self.assertEqual(missed, [])
+        self.assertEqual(invented, [])
+
+    def test_one_part_alone_misses_the_defect_without_inventing_a_finding(self) -> None:
+        # The finding is explained, because it names a part, but the defect is
+        # not found: half of a coupled fix is not the fix.
+        found, missed, invented = split(
+            [self.finding("Le paramètre size n'est plus transmis")], self.PLANTED
+        )
+
+        self.assertEqual(found, [])
+        self.assertEqual(missed, ["coupled"])
+        self.assertEqual(invented, [])
+
+    def test_both_parts_in_one_finding_are_found(self) -> None:
+        found, missed, invented = split(
+            [self.finding("size n'est pas transmis à last_page_number")], self.PLANTED
+        )
+
+        self.assertEqual(found, ["coupled"])
+        self.assertEqual(invented, [])
+
+    def test_a_finding_naming_a_part_on_another_file_is_invented(self) -> None:
+        finding = self.finding("size et last_page_number", file="autre.py")
+
+        found, missed, invented = split([finding], self.PLANTED)
+
+        self.assertEqual(found, [])
+        self.assertEqual(missed, ["coupled"])
+        self.assertEqual(invented, [finding])
 
 
 if __name__ == "__main__":
