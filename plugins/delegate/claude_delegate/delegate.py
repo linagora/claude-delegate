@@ -21,8 +21,10 @@ DENIED_READS = [f"Read({path})" for path in policy.DENIED_PATHS]
 #: the DeepSeek ANTHROPIC_* settings, CLAUDE_CODE_* tuning or tokens, stays out.
 PASSED_ENV = ("HOME", "USER", "LOGNAME", "PATH", "LANG", "TERM", "TMPDIR")
 
-#: The models a review may use; Opus unless the user asks for Sonnet.
-MODELS = ("opus", "sonnet")
+#: The models a review may use; Opus unless the user asks for another. These are
+#: Claude Code's own aliases, each naming the latest model of its family, so the
+#: list does not go stale when a release changes the model behind one of them.
+MODELS = ("opus", "sonnet", "fable")
 DEFAULT_MODEL = "opus"
 EFFORT = "high"
 #: Bounds on what one review may consume from the user's quota.
