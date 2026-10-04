@@ -74,8 +74,8 @@ The v2 specification is tracked in issue #1.
 
 ### Launcher
 
-- **`claude-deepseek`.** A small launcher that opens a Claude Code session on DeepSeek through the LINAGORA
-  AI Gateway (`https://ai-api.linagora.com`, model `deepseek-v4.1-flash`), pointing every model — main,
+- **`claude-worker`.** A small launcher that opens a Claude Code worker session on a non-Anthropic model
+  through the LINAGORA AI Gateway (`https://ai-api.linagora.com`, model `deepseek-v4.1-flash`), pointing every model — main,
   Opus, Sonnet, Haiku and sub-agents — at the gateway model, and raising the `!` command timeout to 15
   minutes. It also bypasses the permission prompts, and forces the effort parameter through, which Claude
   Code withholds from a model it does not know.
@@ -129,13 +129,16 @@ Every step is done from a terminal.
    claude plugin install delegate@claude-delegate
    ```
 
-2. **Install the `claude-deepseek` launcher**, which opens Claude Code on DeepSeek through the LINAGORA AI
-   Gateway (`https://ai-api.linagora.com`, model `deepseek-v4.1-flash`). The marketplace cloned the
+2. **Install the `claude-worker` launcher**, which opens a Claude Code worker session on a non-Anthropic
+   model through the LINAGORA AI Gateway (`https://ai-api.linagora.com`, model `deepseek-v4.1-flash`). The marketplace cloned the
    repository: a symlink is enough, and the launcher follows the marketplace updates:
 
    ```bash
-   ln -s ~/.claude/plugins/marketplaces/claude-delegate/bin/claude-deepseek ~/.local/bin/claude-deepseek
+   ln -s ~/.claude/plugins/marketplaces/claude-delegate/bin/claude-worker ~/.local/bin/claude-worker
    ```
+
+   The name `claude-deepseek` still works: `bin/claude-deepseek` is a link to the launcher, kept for the
+   scripts and habits that predate the rename.
 
    Then store your gateway key in the system keychain. The command prompts you for the key:
 
@@ -148,13 +151,13 @@ Every step is done from a terminal.
 
    On a server with no keychain, export the key in `LINAGORA_API_KEY` instead.
 
-   Then open your worker sessions with `claude-deepseek`. The launcher only sets its variables for the
+   Then open your worker sessions with `claude-worker`. The launcher only sets its variables for the
    session it opens: your other sessions stay on Anthropic.
    - It points every model (main, Opus, Sonnet, Haiku and sub-agents) at the gateway model, because a gateway
      key reaches no other.
    - It raises the `!` command timeout to 15 minutes: an Opus review often exceeds the 2-minute default.
    - It bypasses the permission prompts (`--dangerously-skip-permissions`), and asks for them again when
-     `CLAUDE_DEEPSEEK_ASK_PERMISSIONS=1` is exported. A prompt on a session without a frontier model is a
+     `CLAUDE_WORKER_ASK_PERMISSIONS=1` is exported. A prompt on a session without a frontier model is a
      decision taken on the cheapest available judgement; bypassing it is deliberate, and worth revisiting on
      a repository you do not trust.
    - It sets `CLAUDE_CODE_ALWAYS_ENABLE_EFFORT`, without which `--effort` and `/effort` do nothing in these
@@ -162,9 +165,10 @@ Every step is done from a terminal.
      one of those.
    - Claude Code does not know this model: the cost it displays is wrong, only the gateway billing counts.
    - The claude.ai connectors (Gmail, Google Drive, etc.) are not available in these sessions.
-   - To go through DeepSeek's own API, set `CLAUDE_DEEPSEEK_BASE_URL`, `CLAUDE_DEEPSEEK_MODEL` and
-     `CLAUDE_DEEPSEEK_KEY_SERVICE`, following the
+   - To go through DeepSeek's own API, set `CLAUDE_WORKER_BASE_URL`, `CLAUDE_WORKER_MODEL` and
+     `CLAUDE_WORKER_KEY_SERVICE`, following the
      [DeepSeek documentation for Claude Code](https://api-docs.deepseek.com/quick_start/agent_integrations/claude_code).
+     The older `CLAUDE_DEEPSEEK_*` names are still read, with a deprecation warning on stderr.
 
 3. **Sign in to Anthropic once**, in a dedicated, empty configuration directory. Do not create any link to
    `~/.claude` there: the delegated session must inherit neither your settings nor your plugins. This session
@@ -178,7 +182,7 @@ Every step is done from a terminal.
    On macOS, Claude Code stores these credentials in the keychain, under a key specific to that directory.
    On Linux, it stores them in the directory itself.
 
-4. **Verify the isolation** of the reviewer, from a `claude-deepseek` session, after installation and after
+4. **Verify the isolation** of the reviewer, from a `claude-worker` session, after installation and after
    every Claude Code update:
 
    ```
@@ -425,14 +429,14 @@ claude plugin validate --strict . && claude plugin validate --strict plugins/del
 
 The tests call the CLI as a process, in real temporary git repositories, with a fake `claude` and a fake
 `gh` or `glab`. A pull request lives there in a local bare repository serving as `origin`, to which a
-`url.insteadOf` rule gives a GitHub or GitLab URL. The `claude-deepseek` launcher is tested the same way,
+`url.insteadOf` rule gives a GitHub or GitLab URL. The `claude-worker` launcher is tested the same way,
 with fake `claude`, `security`, `secret-tool` and `uname`. The tests make no network call and no model call.
 
 ## Repository layout
 
 | Path | Content |
 |---|---|
-| [`bin/claude-deepseek`](bin/claude-deepseek) | Launcher that opens Claude Code on DeepSeek through the LINAGORA AI Gateway |
+| [`bin/claude-worker`](bin/claude-worker) | Launcher that opens a Claude Code worker session through the LINAGORA AI Gateway (`bin/claude-deepseek` is a compatibility link to it) |
 | [`plugins/delegate/`](plugins/delegate) | The plugin: slash commands, prompts, and the `claude-delegate` CLI (`claude_delegate/`) |
 | [`tests/`](tests) | End-to-end tests of the CLI and the launcher, against temporary git repositories |
 | [`docs/`](docs) | Agent-facing documentation: issue tracker, triage labels, domain docs |

@@ -4,12 +4,12 @@
     "name": "Linagora",
     "url": "https://github.com/linagora"
   },
-  "description": "Délégation des revues de code d'une session Claude Code sur DeepSeek vers les modèles Anthropic",
+  "description": "Délégation des revues de code d'une session worker vers les modèles Anthropic",
   "plugins": [
     {
       "name": "delegate",
       "source": "./plugins/delegate",
-      "description": "Revues de code déléguées à Claude (Opus par défaut) depuis une session DeepSeek, dans une session isolée en lecture seule, et passage de relais vers une session de spec"
+      "description": "Revues de code déléguées à Claude (Opus par défaut) depuis une session worker, dans une session isolée en lecture seule, et passage de relais vers une session de spec"
     }
   ]
 }

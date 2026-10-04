@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# Claude Code, opened as a worker session on a cheap Anthropic-compatible API.
+#
+# The variables apply to this session only, so that sessions meant for
+# Anthropic stay there. The API key comes from the system keychain, or from
+# LINAGORA_API_KEY on a server without one, never from a file read here.
+#
+# The gateway is LINAGORA's by default. To use another Anthropic-compatible
+# API, such as DeepSeek's own, set CLAUDE_WORKER_BASE_URL, CLAUDE_WORKER_MODEL
+# and CLAUDE_WORKER_KEY_SERVICE. The names this launcher used to carry,
+# CLAUDE_DEEPSEEK_*, are still read as deprecated fallbacks.
+#
+# The permission prompts are bypassed, and the effort parameter is forced
+# through; export CLAUDE_WORKER_ASK_PERMISSIONS=1 to get the prompts back.
+set -euo pipefail
+
+# The old names still work, so a machine configured before the rename keeps
+# its settings: one warning per deprecated variable, naming its replacement.
+deprecated() {
+  echo "${0##*/} : $1 est déprécié, utilisez $2 à la place." >&2
+}
+setting() {
+  local name="$1" old="$2" default="$3"
+  if [ -n "${!name:-}" ]; then
+    printf '%s' "${!name}"
+  elif [ -n "${!old:-}" ]; then
+    deprecated "$old" "$name"
+    printf '%s' "${!old}"
+  else
+    printf '%s' "$default"
+  fi
+}
+
+base_url="$(setting CLAUDE_WORKER_BASE_URL CLAUDE_DEEPSEEK_BASE_URL https://ai-api.linagora.com)"
+model="$(setting CLAUDE_WORKER_MODEL CLAUDE_DEEPSEEK_MODEL deepseek-v4.1-flash)"
+key_service="$(setting CLAUDE_WORKER_KEY_SERVICE CLAUDE_DEEPSEEK_KEY_SERVICE linagora-ai-api-key)"
+
+key="${LINAGORA_API_KEY:-}"
+if [ -z "$key" ]; then
+  if [ "$(uname)" = Darwin ]; then
+    key="$(security find-generic-password -s "$key_service" -w 2>/dev/null || true)"
+  else
+    key="$(secret-tool lookup service "$key_service" 2>/dev/null || true)"
+  fi
+fi
+if [ -z "$key" ]; then
+  {
+    echo "claude-worker : aucune clé d'API dans le trousseau, sous le service « $key_service »."
+    echo "Range-la une fois, la commande la demande :"
+    echo "  macOS : security add-generic-password -a \"\$USER\" -s $key_service -w"
+    echo "  Linux : secret-tool store --label=\"AI Gateway LINAGORA\" service $key_service"
+    echo "Sur un serveur sans trousseau, exporte-la plutôt dans LINAGORA_API_KEY."
+  } >&2
+  exit 1
+fi
+
+export ANTHROPIC_BASE_URL="$base_url"
+export ANTHROPIC_AUTH_TOKEN="$key"
+# Every alias goes to the same model: a gateway key may reach no other, and
+# background tasks or subagents asking for a Claude model would be refused.
+export ANTHROPIC_MODEL="$model"
+export ANTHROPIC_DEFAULT_OPUS_MODEL="$model"
+export ANTHROPIC_DEFAULT_SONNET_MODEL="$model"
+export ANTHROPIC_DEFAULT_HAIKU_MODEL="$model"
+export CLAUDE_CODE_SUBAGENT_MODEL="$model"
+# Claude Code only sends the effort parameter to models it recognises as
+# effort-capable, and a model behind a gateway is not one of them: without
+# this, --effort and /effort have no effect at all on this session.
+export CLAUDE_CODE_ALWAYS_ENABLE_EFFORT="${CLAUDE_CODE_ALWAYS_ENABLE_EFFORT:-1}"
+# The delegate plugin's `!` commands run a whole review: 15 minutes, not 2.
+export BASH_DEFAULT_TIMEOUT_MS="${BASH_DEFAULT_TIMEOUT_MS:-900000}"
+
+# The permission prompts are bypassed: a session on a cheap model should spend
+# its turns on the code, not on approvals. Export CLAUDE_WORKER_ASK_PERMISSIONS=1
+# to get the prompts back.
+ask_permissions="$(setting CLAUDE_WORKER_ASK_PERMISSIONS CLAUDE_DEEPSEEK_ASK_PERMISSIONS "")"
+if [ "$ask_permissions" = "1" ]; then
+  exec claude "$@"
+fi
+exec claude --dangerously-skip-permissions "$@"

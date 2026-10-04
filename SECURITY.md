@@ -20,7 +20,7 @@ Please include as much of the following as you can:
 
 - the component concerned: the plugin's slash commands or prompts, the `claude-delegate` CLI
   (`plugins/delegate/claude_delegate/`), the reviewer's isolation (flags, environment allowlist,
-  forbidden-file list), the launcher (`bin/claude-deepseek`), or the report archive;
+  forbidden-file list), the launcher (`bin/claude-worker`), or the report archive;
 - the commit where you found it;
 - a description of the vulnerability and of its impact;
 - the steps to reproduce it, or a proof of concept;
