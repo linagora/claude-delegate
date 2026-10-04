@@ -14,6 +14,7 @@ import os
 import pty
 import select
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -795,6 +796,27 @@ class InstallerTest(unittest.TestCase):
         self.assertIn("can reach", result.stdout)
 
     # -- the reviewer ----------------------------------------------------
+
+    def test_a_reviewer_directory_left_open_is_tightened(self) -> None:
+        # Claude Code creates it itself, under whatever umask is in force, so it
+        # can arrive group- or world-readable while holding the Anthropic
+        # credentials. The README tells the user to make it 700 by hand; an
+        # install that finds it looser fixes it instead of leaving the two
+        # paths disagreeing.
+        reviewer = self.home / ".claude-anthropic"
+        reviewer.mkdir()
+        reviewer.chmod(0o775)
+
+        self.install(env=self.env(CLAUDE_WORKER_PROVIDER="linagora"))
+
+        self.assertEqual(stat.S_IMODE(reviewer.stat().st_mode), 0o700)
+
+    def test_the_installer_does_not_create_the_reviewer_directory(self) -> None:
+        # Nothing of the reviewer's is installed before the sign-in, so the
+        # installer must not leave an empty home for credentials behind.
+        self.install(env=self.env(CLAUDE_WORKER_PROVIDER="linagora"))
+
+        self.assertFalse((self.home / ".claude-anthropic").exists())
 
     def test_the_installer_never_signs_in_to_anthropic(self) -> None:
         self.install(env=self.env(CLAUDE_WORKER_PROVIDER="linagora"))

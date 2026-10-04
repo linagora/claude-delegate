@@ -373,6 +373,14 @@ verify_worker() {
 }
 
 check_reviewer() {
+  # Claude Code creates this directory by itself the first time it runs with
+  # CLAUDE_CONFIG_DIR, under whatever umask is in force, so it can end up
+  # group- or world-readable. The Anthropic credentials live here, and the
+  # README has the user create it 700 by hand, so an install that finds it
+  # widens nothing and makes it match.
+  if [ -d "${REVIEWER_DIR}" ]; then
+    chmod 700 "${REVIEWER_DIR}" 2>/dev/null || true
+  fi
   if [ -s "${REVIEWER_DIR}/.credentials.json" ]; then
     say ""
     say "The reviewer session is connected."
@@ -384,6 +392,7 @@ check_reviewer() {
   say ""
   say "The reviewer session is not connected yet. To finish, sign in to Anthropic once:"
   say ""
+  say "  mkdir -p ${REVIEWER_DIR} && chmod 700 ${REVIEWER_DIR}"
   say "  CLAUDE_CONFIG_DIR=${REVIEWER_DIR} claude"
   say ""
   say "Then type /login, and quit. The rest of this setup is already done."
