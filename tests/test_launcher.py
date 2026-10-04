@@ -209,6 +209,96 @@ class LauncherTest(unittest.TestCase):
         self.assertEqual(started["env"]["ANTHROPIC_BASE_URL"], GATEWAY)
         self.assertEqual(started["argv"], ["--dangerously-skip-permissions", "--resume", "abc"])
 
+    # -- the configuration file written by the installer ----------------
+
+    def configure(self, **values: str) -> None:
+        directory = self.root / ".config" / "claude-worker"
+        directory.mkdir(parents=True, exist_ok=True)
+        lines = [f'{name}="{value}"\n' for name, value in values.items()]
+        (directory / "config").write_text("".join(lines), encoding="utf-8")
+
+    def test_the_installer_configuration_file_is_read(self) -> None:
+        self.configure(
+            CLAUDE_WORKER_BASE_URL="https://exemple.test",
+            CLAUDE_WORKER_MODEL="un-modele",
+            CLAUDE_WORKER_API_KEY="CLE_DU_FICHIER",
+        )
+        self.store({})
+
+        started = self.started(self.launch())
+
+        env = started["env"]
+        self.assertEqual(env["ANTHROPIC_BASE_URL"], "https://exemple.test")
+        self.assertEqual(env["ANTHROPIC_AUTH_TOKEN"], "CLE_DU_FICHIER")
+        self.assertEqual({env[name] for name in MODEL_VARIABLES}, {"un-modele"})
+
+    def test_an_environment_variable_wins_over_the_configuration_file(self) -> None:
+        self.configure(CLAUDE_WORKER_MODEL="modele-du-fichier", CLAUDE_WORKER_API_KEY="CLE_DU_FICHIER")
+        self.store({})
+
+        started = self.started(self.launch(env={"CLAUDE_WORKER_MODEL": "modele-de-l-environnement"}))
+
+        self.assertEqual({started["env"][name] for name in MODEL_VARIABLES}, {"modele-de-l-environnement"})
+
+    def test_the_configuration_file_gives_the_key_when_the_keychain_has_none(self) -> None:
+        # A machine set up by the installer carries the key in the file: the
+        # keychain, which the README's manual path uses, is then only a fallback.
+        self.configure(CLAUDE_WORKER_API_KEY="CLE_DU_FICHIER")
+        self.store({KEY_SERVICE: "CLE_DU_TROUSSEAU"})
+
+        started = self.started(self.launch())
+
+        self.assertEqual(started["env"]["ANTHROPIC_AUTH_TOKEN"], "CLE_DU_FICHIER")
+
+    def test_an_environment_key_wins_over_the_configuration_file(self) -> None:
+        # `CLAUDE_WORKER_API_KEY` is the name install.sh writes: exporting it
+        # must override the file, the way the other settings already do.
+        self.configure(CLAUDE_WORKER_API_KEY="CLE_DU_FICHIER")
+        self.store({})
+
+        started = self.started(self.launch(env={"CLAUDE_WORKER_API_KEY": "CLE_DE_L_ENVIRONNEMENT"}))
+
+        self.assertEqual(started["env"]["ANTHROPIC_AUTH_TOKEN"], "CLE_DE_L_ENVIRONNEMENT")
+
+    def test_linagora_api_key_still_wins_over_the_configuration_file(self) -> None:
+        self.configure(CLAUDE_WORKER_API_KEY="CLE_DU_FICHIER")
+        self.store({})
+
+        started = self.started(self.launch(env={"LINAGORA_API_KEY": "CLE_HISTORIQUE"}))
+
+        self.assertEqual(started["env"]["ANTHROPIC_AUTH_TOKEN"], "CLE_HISTORIQUE")
+
+    def test_an_empty_model_falls_back_to_the_gateway_default(self) -> None:
+        # Claude Code always sends a model name, and a restricted key refuses
+        # its Claude names, so a model is pinned even when none was chosen.
+        self.configure(CLAUDE_WORKER_API_KEY="CLE_DU_FICHIER", CLAUDE_WORKER_MODEL="")
+        self.store({})
+
+        started = self.started(self.launch())
+
+        self.assertEqual({started["env"][name] for name in MODEL_VARIABLES}, {GATEWAY_MODEL})
+
+    def test_the_configuration_is_read_below_xdg_config_home(self) -> None:
+        # install.sh writes under ${XDG_CONFIG_HOME:-$HOME/.config}; the launcher
+        # must look at the same place, XDG_CONFIG_HOME being defined or not.
+        elsewhere = self.root / "xdg"
+        (elsewhere / "claude-worker").mkdir(parents=True)
+        (elsewhere / "claude-worker" / "config").write_text(
+            'CLAUDE_WORKER_API_KEY="CLE_XDG"\nCLAUDE_WORKER_MODEL="modele-xdg"\n', encoding="utf-8"
+        )
+        self.store({})
+
+        started = self.started(self.launch(env={"XDG_CONFIG_HOME": str(elsewhere)}))
+
+        env = started["env"]
+        self.assertEqual(env["ANTHROPIC_AUTH_TOKEN"], "CLE_XDG")
+        self.assertEqual({env[name] for name in MODEL_VARIABLES}, {"modele-xdg"})
+
+    def test_the_keychain_still_serves_a_machine_configured_by_hand(self) -> None:
+        started = self.started(self.launch())
+
+        self.assertEqual(started["env"]["ANTHROPIC_AUTH_TOKEN"], "CLE_DE_TEST")
+
     def test_a_timeout_already_chosen_is_kept(self) -> None:
         started = self.started(self.launch(env={"BASH_DEFAULT_TIMEOUT_MS": "1200000"}))
 

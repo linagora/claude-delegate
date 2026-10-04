@@ -2,8 +2,8 @@
 # Claude Code, opened as a worker session on a cheap Anthropic-compatible API.
 #
 # The variables apply to this session only, so that sessions meant for
-# Anthropic stay there. The API key comes from the system keychain, or from
-# LINAGORA_API_KEY on a server without one, never from a file read here.
+# Anthropic stay there. The API key comes from LINAGORA_API_KEY, then from the
+# configuration file install.sh writes, then from the system keychain.
 #
 # The gateway is LINAGORA's by default. To use another Anthropic-compatible
 # API, such as DeepSeek's own, set CLAUDE_WORKER_BASE_URL, CLAUDE_WORKER_MODEL
@@ -14,28 +14,53 @@
 # through; export CLAUDE_WORKER_ASK_PERMISSIONS=1 to get the prompts back.
 set -euo pipefail
 
+# What install.sh wrote, read when the environment says nothing. The file is
+# `NAME="value"` lines, so it is parsed rather than sourced: a value holding a
+# command substitution must stay a value.
+config_file="${XDG_CONFIG_HOME:-${HOME:-}/.config}/claude-worker/config"
+config_value() {
+  [ -f "$config_file" ] || return 0
+  sed -n "s/^$1=\"\(.*\)\"\$/\1/p" "$config_file" | head -n1
+}
 # The old names still work, so a machine configured before the rename keeps
 # its settings: one warning per deprecated variable, naming its replacement.
 deprecated() {
   echo "${0##*/} : $1 est déprécié, utilisez $2 à la place." >&2
 }
 setting() {
-  local name="$1" old="$2" default="$3"
+  local name="$1" old="$2" default="$3" from_config
   if [ -n "${!name:-}" ]; then
     printf '%s' "${!name}"
-  elif [ -n "${!old:-}" ]; then
+    return 0
+  fi
+  if [ -n "${!old:-}" ]; then
     deprecated "$old" "$name"
     printf '%s' "${!old}"
-  else
-    printf '%s' "$default"
+    return 0
   fi
+  from_config="$(config_value "$name")"
+  if [ -n "$from_config" ]; then
+    printf '%s' "$from_config"
+    return 0
+  fi
+  printf '%s' "$default"
 }
 
 base_url="$(setting CLAUDE_WORKER_BASE_URL CLAUDE_DEEPSEEK_BASE_URL https://ai-api.linagora.com)"
-model="$(setting CLAUDE_WORKER_MODEL CLAUDE_DEEPSEEK_MODEL deepseek-v4.1-flash)"
+# The service the key is filed under. install.sh writes it per provider, but an
+# older file may not carry it: the LINAGORA name is then the one to try.
 key_service="$(setting CLAUDE_WORKER_KEY_SERVICE CLAUDE_DEEPSEEK_KEY_SERVICE linagora-ai-api-key)"
 
-key="${LINAGORA_API_KEY:-}"
+# Claude Code always sends a model name, its own Claude names when nothing else
+# is set, and a restricted key refuses those. So a model is always pinned, on
+# every alias: an empty variable or an empty file line means the same as no
+# value at all, and the gateway default is used.
+model="$(setting CLAUDE_WORKER_MODEL CLAUDE_DEEPSEEK_MODEL deepseek-v4.1-flash)"
+
+key="${CLAUDE_WORKER_API_KEY:-${LINAGORA_API_KEY:-}}"
+if [ -z "$key" ]; then
+  key="$(config_value CLAUDE_WORKER_API_KEY)"
+fi
 if [ -z "$key" ]; then
   if [ "$(uname)" = Darwin ]; then
     key="$(security find-generic-password -s "$key_service" -w 2>/dev/null || true)"
@@ -49,7 +74,8 @@ if [ -z "$key" ]; then
     echo "Range-la une fois, la commande la demande :"
     echo "  macOS : security add-generic-password -a \"\$USER\" -s $key_service -w"
     echo "  Linux : secret-tool store --label=\"AI Gateway LINAGORA\" service $key_service"
-    echo "Sur un serveur sans trousseau, exporte-la plutôt dans LINAGORA_API_KEY."
+    echo "Sur un serveur sans trousseau, exporte-la plutôt dans LINAGORA_API_KEY,"
+    echo "ou range-la une fois pour toutes avec install.sh."
   } >&2
   exit 1
 fi

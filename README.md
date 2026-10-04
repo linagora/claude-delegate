@@ -119,10 +119,23 @@ requests you also need the GitHub CLI (`gh`) or, for GitLab merge requests, the 
 Linux, the launcher reads the gateway key from the keychain with `secret-tool` (Debian/Ubuntu package
 `libsecret-tools`).
 
-Every step is done from a terminal.
+The short path is one command, on a fresh machine:
 
-1. **Add the marketplace and install the plugin.** The repository is private: you need git access to
-   `linagora/claude-delegate`.
+```bash
+curl -fsSL https://raw.githubusercontent.com/linagora/claude-delegate/main/install.sh | bash
+```
+
+It installs Claude Code only if it is missing, adds the marketplace and the plugin, links the
+`claude-worker` launcher into `~/.local/bin`, asks you for a provider and a key, and checks that the worker
+session answers. The key goes to the system keychain when there is one; otherwise it is written, with the
+rest of the configuration, to `~/.config/claude-worker/config` (mode `0600`, plain `NAME=value` lines the
+launcher parses, so never `source` it). It never signs in to Anthropic for you: that step stays yours, and it
+says what to do. Run `install.sh --uninstall` to remove the configuration, the keychain entry and the links.
+
+The steps below are the same work by hand. Read them to understand what the installer did, or to redo one of
+them.
+
+1. **Add the marketplace and install the plugin.**
 
    ```bash
    claude plugin marketplace add linagora/claude-delegate
@@ -149,7 +162,10 @@ Every step is done from a terminal.
    security add-generic-password -a "$USER" -s linagora-ai-api-key -w
    ```
 
-   On a server with no keychain, export the key in `LINAGORA_API_KEY` instead.
+   On a server with no keychain, export the key in `LINAGORA_API_KEY` instead. The installer takes a third
+   path: it writes `CLAUDE_WORKER_API_KEY` into `~/.config/claude-worker/config`, which the launcher reads
+   before the keychain. For each setting the launcher tries the environment variable first, then that file,
+   then its own default.
 
    Then open your worker sessions with `claude-worker`. The launcher only sets its variables for the
    session it opens: your other sessions stay on Anthropic.
@@ -436,6 +452,7 @@ with fake `claude`, `security`, `secret-tool` and `uname`. The tests make no net
 
 | Path | Content |
 |---|---|
+| [`install.sh`](install.sh) | Guided installer for a fresh machine: Claude Code, the plugin, the launcher links, the provider key |
 | [`bin/claude-worker`](bin/claude-worker) | Launcher that opens a Claude Code worker session through the LINAGORA AI Gateway (`bin/claude-deepseek` is a compatibility link to it) |
 | [`plugins/delegate/`](plugins/delegate) | The plugin: slash commands, prompts, and the `claude-delegate` CLI (`claude_delegate/`) |
 | [`tests/`](tests) | End-to-end tests of the CLI and the launcher, against temporary git repositories |
