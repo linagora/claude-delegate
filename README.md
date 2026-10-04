@@ -558,6 +558,7 @@ with fake `claude`, `security`, `secret-tool` and `uname`. The tests make no net
 | [`plugins/delegate/`](plugins/delegate) | The plugin: slash commands, prompts, and the `claude-delegate` CLI (`claude_delegate/`) |
 | [`tests/`](tests) | End-to-end tests of the CLI and the launcher, against temporary git repositories |
 | [`benchmark/`](benchmark) | Compares the reviewer models on reference cases; not part of the test suite |
+| [`acceptance/`](acceptance) | Replays the human acceptance checklist (#12, section A) on a Linux workstation |
 | [`docs/`](docs) | Agent-facing documentation: issue tracker, triage labels, domain docs |
 | [`.claude-plugin/marketplace.json`](.claude-plugin/marketplace.json) | Marketplace manifest |
 
@@ -576,6 +577,21 @@ the change plants, and the score is what a reviewer is for: the planted defects 
 match none of them. A real run calls Anthropic and costs money, once per case and per model; a finding the
 script flags as invented still has to be read, since it may be a real defect the case did not plant. The
 harness is not part of `unittest discover`: the suite stays offline and free.
+
+## Linux acceptance run
+
+[`acceptance/linux.sh`](acceptance/linux.sh) replays the checklist of [#12](https://github.com/linagora/claude-delegate/issues/12),
+section A, on the machine it runs on and prints one verdict per step:
+
+```bash
+bash acceptance/linux.sh                  # A1-A9, no model call
+bash acceptance/linux.sh --with-selftest  # also A10, which calls Anthropic
+```
+
+It automates what a script can honestly automate. Everything runs in a temporary directory under a fake
+`HOME`, so the installer is exercised without touching the real installation, its config or its links. Two
+steps cannot be automated: signing in to the reviewer (`/login` in `~/.claude-anthropic`) and reading a
+report's triage. Those are printed as instructions and marked `NON ÉVALUÉ`, never guessed.
 
 ## Roadmap
 
