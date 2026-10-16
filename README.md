@@ -559,6 +559,7 @@ with fake `claude`, `security`, `secret-tool` and `uname`. The tests make no net
 | [`tests/`](tests) | End-to-end tests of the CLI and the launcher, against temporary git repositories |
 | [`benchmark/`](benchmark) | Compares the reviewer models on reference cases; not part of the test suite |
 | [`acceptance/`](acceptance) | Replays the human acceptance checklist (#12, section A) on a Linux workstation |
+| [`.linagora/sensitivity.yml`](.linagora/sensitivity.yml), [`qrg_pilot/`](qrg_pilot) | Sensitivity classes read by the QRG router, and the fictitious zones C0 to C3 it routes against; not part of the plugin |
 | [`docs/`](docs) | Agent-facing documentation: issue tracker, triage labels, domain docs |
 | [`.claude-plugin/marketplace.json`](.claude-plugin/marketplace.json) | Marketplace manifest |
 
