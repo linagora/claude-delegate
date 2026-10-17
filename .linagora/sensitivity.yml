@@ -1,0 +1,38 @@
+# Sensitivity classes of this repository, read by the QRG router (qrg-router).
+#
+# The router computes the class of a delegated task from this file and from
+# the paths the delegated agent can read. Neither the task text nor a model
+# takes part in it. A version of this file changed on a branch can raise a
+# class, never lower one: only the version on the default branch can.
+#
+# Classes: C0 public, C1 internal, C2 client confidential, C3 sensitive.
+# Everything under qrg_pilot/ is fictitious and only exercises the router.
+version: 1
+
+# Class of every tracked path that no zone covers. claude-delegate is
+# published under AGPL-3.0, hence public.
+default: C0
+
+zones:
+  - id: pilot-public
+    class: C0
+    paths: ["qrg_pilot/c0_public/**"]
+    description: Fictitious module, as if published.
+
+  - id: pilot-internal-tooling
+    class: C1
+    paths: ["qrg_pilot/c1_internal/**"]
+    labels: [internal-tooling]
+    description: Fictitious unpublished internal tooling.
+
+  - id: pilot-client-acme
+    class: C2
+    paths: ["qrg_pilot/c2_client_acme/**"]
+    labels: ["client:acme", public-procurement]
+    description: Fictitious code of a client under a public procurement contract.
+
+  - id: pilot-secnumcloud
+    class: C3
+    paths: ["qrg_pilot/c3_secnumcloud/**"]
+    labels: [secnumcloud, personal-data, secrets]
+    description: Fictitious SecNumCloud scope with synthetic personal data and a canary secret.
